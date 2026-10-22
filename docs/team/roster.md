@@ -1,8 +1,9 @@
 # 团队成员名单（CampusOverflow · Sprint 0）
 
-> 状态：**组队中**。组长（PO）尚未创建远程团队仓库，其余成员待组长确认后补录。
+> 状态：**组队中**。团队仓库已由组长创建（`Lin-Kaiyang2412/CampusOverflow`），
+> 朱淦已受邀加入并具备 push 权限；其余成员待组长确认后补录。
 > 补录方式：每位新成员 clone 仓库后填写 `docs/team/hello-TEMPLATE.md`，
-> 重命名为 `hello-<姓名拼音>.md` 并提交 PR（见 [remote-setup.md](remote-setup.md)）。
+> 重命名为 `hello-<姓名拼音>.md` 并提交 PR（模板内已写明分支命名与流程）。
 
 | # | 姓名 | 拼音 | 角色 | Git 分支 | hello 文档 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -36,7 +37,8 @@
 
 ## 补录清单（组长待办）
 
-- [ ] 创建团队远程仓库并邀请成员
-- [ ] 配置 main 分支保护（见 [branch-protection.md](branch-protection.md)）
+- [x] 创建团队远程仓库并邀请成员（已完成，仓库 `Lin-Kaiyang2412/CampusOverflow`）
+- [ ] 配置 main 分支保护（见 [branch-protection.md](branch-protection.md)）——**需 admin 权限，仅组长可做**
 - [ ] 把本表第 2-5 行的姓名、拼音、角色补齐
 - [ ] 通知成员各自提交首次 PR
+- [ ] 评审 PR #3（hello 文档）与 PR #5（团队治理文件）

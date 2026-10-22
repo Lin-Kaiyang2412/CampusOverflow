@@ -1,7 +1,9 @@
 # 分支保护配置说明
 
-> **状态**：⏳ 待执行 —— 组长创建远程仓库后的**第一件事**就是配它。
-> 课程常见陷阱第一条就是「成员各自在 main 上直接提交」，规避办法就是建仓即上保护。
+> **状态**：⏳ 待执行 —— **必须由组长操作**。
+> 实测（2026-10-22）：朱淦账号对该仓库 `permissions.admin = false`（仅 push），
+> 调用分支保护 REST API 返回 **HTTP 404 Not Found**，无法代为配置。
+> 课程常见陷阱第一条就是「成员各自在 main 上直接提交」，规避办法就是建仓后第一件事上保护。
 
 ## 1. 要达成的目标状态
 
@@ -12,10 +14,14 @@
 | 合并前需审批数 | **1**（Sprint 0–1）→ **2**（Sprint 2 起） | 至少 1 名队友 LGTM |
 | Dismiss stale approvals | ✅ 开启 | 改完代码旧 LGTM 作废 |
 | Require review from Code Owners | ✅ 开启 | 配合 `.github/CODEOWNERS` |
-| 合并前必须通过状态检查 | `build` / `lint` / `test`（Lab 7 起加 `sonar`） | CI 红了不许合 |
+| 合并前必须通过状态检查 | **Sprint 0–1 只勾 `前端构建`**；Sprint 2 起加 `后端构建与验证`；Lab 7 加覆盖率门禁 | 基线后端测试天然红，全勾会把 PR 全堵死，见 [ci-baseline-note.md](ci-baseline-note.md) |
 | Require branches up to date | ✅ 开启 | 避免合并陈旧分支 |
 | 禁止 force push | ✅ 开启 | 防止历史被改写 |
 | 禁止删除分支 | ✅ 开启 | 防止误删 |
+
+> ⚠️ **状态检查名字要对上实际工作流**。本仓库 `.github/workflows/ci.yml` 产出的检查项名称是
+> **`前端构建`**、**`后端构建与验证`**、**`容器镜像构建`**，不是 `build` / `lint` / `test`。
+> 在 GitHub 网页上勾选时，只有在**该检查项至少运行过一次之后**才会出现在候选列表里。
 
 ## 2. 方式 A：GitHub 网页（零工具依赖，推荐组长用）
 
@@ -26,7 +32,7 @@
   - ✅ Require a pull request before merging → Required approvals: `1`
   - ✅ Dismiss stale pull request approvals when new commits are pushed
   - ✅ Require review from Code Owners
-  - ✅ Require status checks to pass → 填 `build`、`lint`、`test`
+  - ✅ Require status checks to pass → 先只填 `前端构建`
   - ✅ Require branches to be up to date before merging
   - ✅ Require conversation resolution before merging
   - ✅ Do not allow bypassing the above settings（把管理员也一起管住）
@@ -46,7 +52,7 @@ curl -X PUT \
   -H "Accept: application/vnd.github+json" \
   "https://api.github.com/repos/<组织或用户名>/campus-overflow/branches/main/protection" \
   -d '{
-    "required_status_checks": { "strict": true, "contexts": ["build", "lint", "test"] },
+    "required_status_checks": { "strict": true, "contexts": ["前端构建"] },
     "enforce_admins": true,
     "required_pull_request_reviews": {
       "dismiss_stale_reviews": true,
