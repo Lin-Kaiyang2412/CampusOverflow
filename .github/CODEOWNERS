@@ -1,0 +1,20 @@
+# CODEOWNERS —— 按目录自动指派评审责任人
+# 语法：路径  @用户名（Gitee 用 @用户名 亦可，需是仓库成员）
+
+# 团队治理文件变更需 SM 过目
+/docs/team/      @ZGABCD1
+
+# 分支保护与 CI 配置变更需 SM + 组长
+/.github/        @ZGABCD1
+/docs/adr/       @ZGABCD1
+
+# 后端（Lab 4 后按限界上下文拆开）
+# /co-qa/        @<后端负责人>
+# /co-identity/  @<后端负责人>
+
+# 前端（Lab 5 后启用）
+# /web/          @<前端负责人>
+
+# 依赖与配置
+/pom.xml         @ZGABCD1
+/.gitignore      @ZGABCD1

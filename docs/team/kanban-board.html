@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>CampusOverflow 团队看板 · Sprint 0</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1f2328; --ink-soft: #57606a;
+    --line: #d8dee4; --todo: #0969da; --doing: #bc4c00; --review: #8250df; --done: #1a7f37;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px; background: var(--bg); color: var(--ink);
+    font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", Arial, sans-serif; }
+  header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  h1 { font-size: 22px; margin: 0; letter-spacing: .5px; }
+  .meta { color: var(--ink-soft); font-size: 13px; }
+  .meta b { color: var(--ink); font-weight: 600; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0 20px; }
+  .board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; align-items: start; }
+  .col { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .col-head { padding: 11px 14px; font-size: 14px; font-weight: 700; color: #fff;
+    display: flex; justify-content: space-between; align-items: center; }
+  .col-head .count { background: rgba(255,255,255,.25); border-radius: 10px; padding: 1px 8px; font-size: 12px; }
+  .c-todo .col-head { background: var(--todo); }
+  .c-doing .col-head { background: var(--doing); }
+  .c-review .col-head { background: var(--review); }
+  .c-done .col-head { background: var(--done); }
+  .wip { padding: 7px 14px; font-size: 11px; color: var(--ink-soft);
+    border-bottom: 1px dashed var(--line); background: #fbfcfd; }
+  .cards { padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+  .card { border: 1px solid var(--line); border-left: 3px solid var(--todo);
+    border-radius: 8px; padding: 10px 11px; background: #fff; }
+  .card h3 { margin: 0 0 6px; font-size: 13.5px; font-weight: 600; line-height: 1.45; }
+  .card p { margin: 0 0 8px; font-size: 11.5px; color: var(--ink-soft); line-height: 1.55; }
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .tag { font-size: 10.5px; padding: 2px 7px; border-radius: 20px; background: #eef1f4; color: var(--ink-soft); }
+  .tag.sp { background: #fff1e5; color: #953800; font-weight: 700; }
+  .tag.owner { background: #dafbe1; color: #116329; }
+  .tag.lab { background: #ddf4ff; color: #0969da; }
+  .tag.blk { background: #ffebe9; color: #a40e26; }
+  .c-doing .card { border-left-color: var(--doing); }
+  .c-review .card { border-left-color: var(--review); }
+  .c-done .card { border-left-color: var(--done); }
+  footer { margin-top: 18px; font-size: 11.5px; color: var(--ink-soft); line-height: 1.8; }
+  @media print { body { padding: 10px; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>CampusOverflow · 团队看板</h1>
+  <div class="meta">
+    Sprint <b>0</b> ｜ 第 <b>2</b> 周 ｜ 更新 <b>2026-10-22</b> ｜ SM <b>朱淦</b> ｜ 线上工具 <b>GitHub Projects（待建仓后同步）</b>
+  </div>
+</header>
+<hr />
+
+<div class="board">
+
+  <div class="col c-todo">
+    <div class="col-head"><span>To Do</span><span class="count">8</span></div>
+    <div class="wip">Backlog 池，不设 WIP 上限</div>
+    <div class="cards">
+      <div class="card">
+        <h3>US-001 注册与登录</h3>
+        <p>作为学生，我希望用学号 + 校内邮箱注册并登录，以便拥有可追溯的提问身份。</p>
+        <div class="tags"><span class="tag sp">5 SP</span><span class="tag lab">Lab 6</span><span class="tag">identity</span></div>
+      </div>
+      <div class="card">
+        <h3>US-002 发布问题</h3>
+        <p>作为提问学生，我希望发布带标题、正文与标签的问题，以便他人检索与回答。</p>
+        <div class="tags"><span class="tag sp">5 SP</span><span class="tag lab">Lab 4/5</span><span class="tag">qa</span></div>
+      </div>
+      <div class="card">
+        <h3>US-003 浏览与搜索问题</h3>
+        <p>作为浏览者，我希望按标签与关键词筛选问题列表，以便快速找到已有答案。</p>
+        <div class="tags"><span class="tag sp">8 SP</span><span class="tag">discovery</span></div>
+      </div>
+      <div class="card">
+        <h3>US-004 回答问题</h3>
+        <p>作为知情学生，我希望对问题提交回答，以便把经验沉淀下来。</p>
+        <div class="tags"><span class="tag sp">5 SP</span><span class="tag">qa</span></div>
+      </div>
+      <div class="card">
+        <h3>US-005 投票</h3>
+        <p>作为社区成员，我希望对问题与答案投赞成/反对票，以便优质内容浮现。</p>
+        <div class="tags"><span class="tag sp">5 SP</span><span class="tag lab">Lab 6</span><span class="tag">reputation</span></div>
+      </div>
+      <div class="card">
+        <h3>US-006 采纳最佳答案</h3>
+        <p>作为提问者，我希望采纳一个答案，以便后来者直接看到结论。</p>
+        <div class="tags"><span class="tag sp">3 SP</span><span class="tag">qa</span></div>
+      </div>
+      <div class="card">
+        <h3>US-007 评论与追问</h3>
+        <p>作为参与者，我希望对问题/答案发表评论，以便澄清细节而不必新增答案。</p>
+        <div class="tags"><span class="tag sp">3 SP</span><span class="tag">qa</span></div>
+      </div>
+      <div class="card">
+        <h3>US-008 声誉值计算</h3>
+        <p>作为贡献者，我希望因提问、回答、被采纳获得声誉，以便体现可信度。</p>
+        <div class="tags"><span class="tag sp">8 SP</span><span class="tag lab">Lab 6</span><span class="tag">reputation</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col c-doing">
+    <div class="col-head"><span>In Progress</span><span class="count">2</span></div>
+    <div class="wip">WIP 上限 3，每人同时 ≤ 1 张</div>
+    <div class="cards">
+      <div class="card">
+        <h3>T-001 配置 main 分支保护</h3>
+        <p>禁止直推、PR 必审、CI 必过。远程建仓后立即执行。</p>
+        <div class="tags"><span class="tag owner">组长</span><span class="tag lab">Lab 1</span><span class="tag blk">阻塞中</span></div>
+      </div>
+      <div class="card">
+        <h3>T-002 补齐成员 hello 文档与 PR</h3>
+        <p>待组长建仓后，3-4 名成员各自提交 feature 分支与 hello 文档。</p>
+        <div class="tags"><span class="tag owner">全体</span><span class="tag lab">Lab 1</span><span class="tag blk">阻塞中</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col c-review">
+    <div class="col-head"><span>In Review</span><span class="count">1</span></div>
+    <div class="wip">需 ≥1 名队友带理由的 LGTM</div>
+    <div class="cards">
+      <div class="card">
+        <h3>PR #001 添加朱淦的自我介绍</h3>
+        <p>feature/zhugan-hello → main，新增 docs/team/hello-zhugan.md。本地已合并，线上评审待补录。</p>
+        <div class="tags"><span class="tag owner">朱淦</span><span class="tag lab">Lab 1</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col c-done">
+    <div class="col-head"><span>Done</span><span class="count">4</span></div>
+    <div class="wip">需满足 DoD v1.0 全部条目</div>
+    <div class="cards">
+      <div class="card">
+        <h3>T-000 本地仓库初始化</h3>
+        <p>campus-overflow 本地仓库建立，main 为默认分支。</p>
+        <div class="tags"><span class="tag owner">朱淦</span><span class="tag lab">Lab 1</span></div>
+      </div>
+      <div class="card">
+        <h3>T-003 个人技能矩阵自评</h3>
+        <p>docs/team/skill-matrix-zhugan.md，用于互补组队。</p>
+        <div class="tags"><span class="tag owner">朱淦</span><span class="tag lab">Lab 1</span></div>
+      </div>
+      <div class="card">
+        <h3>T-004 角色承诺书</h3>
+        <p>docs/team/role-commitment-zhugan.md 签订并提交。</p>
+        <div class="tags"><span class="tag owner">朱淦</span><span class="tag lab">Lab 1</span></div>
+      </div>
+      <div class="card">
+        <h3>T-005 团队章程 v1.0</h3>
+        <p>docs/team/charter-v1.0.md 签署提交。</p>
+        <div class="tags"><span class="tag owner">朱淦</span><span class="tag lab">Lab 1</span></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  初始 Backlog：8 条用户故事（US-001 ~ US-008）+ 5 条团队任务，覆盖「注册 → 浏览 → 提问 → 回答 → 互动 → 成长」主干。<br />
+  角色分布：朱淦 = SM + Developer（兼 QA）；PO 待组长到位；其余 Developer 待补录。<br />
+  本页为本地渲染版，组长在 GitHub Projects / Gitee 建看板后按此四列同步（To Do / In Progress / In Review / Done）。
+</footer>
+
+</body>
+</html>
