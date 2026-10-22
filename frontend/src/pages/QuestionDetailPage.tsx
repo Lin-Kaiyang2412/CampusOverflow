@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import { MarkdownEditor } from '../components/MarkdownEditor';
+import { BountyPanel } from '../components/BountyPanel';
 import type { QuestionDetail } from '../types';
 
 export function QuestionDetailPage() {
@@ -12,19 +14,29 @@ export function QuestionDetailPage() {
   const [related, setRelated] = useState<{ id: number; title: string }[]>([]);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState('');
+  const [pending, setPending] = useState(false);
 
   const load = useCallback(() => {
-    api.question(questionId).then(setQ).catch((e) => setError(e.message));
+    api.question(questionId).then((value) => { setQ(value); setError(''); }).catch((e) => setError(e.message));
   }, [questionId]);
 
   useEffect(() => {
-    load();
-    api.related(questionId).then(setRelated).catch(() => undefined);
+    let current = true;
+    setQ(null); setRelated([]); setError(''); setDraft('');
+    if (!Number.isSafeInteger(questionId) || questionId < 1) { setError('问题编号无效。'); return; }
+    api.question(questionId).then((value) => { if (current) setQ(value); }).catch((e: Error) => { if (current) setError(e.message); });
+    api.related(questionId).then((value) => { if (current) setRelated(value); }).catch(() => undefined);
+    return () => { current = false; };
   }, [load, questionId]);
 
-  const act = (fn: () => Promise<unknown>) => fn().then(load).catch((e) => setError(e.message));
+  const act = async (fn: () => Promise<unknown>) => {
+    if (pending) return;
+    setPending(true); setError('');
+    try { await fn(); load(); } catch (e) { setError(e instanceof Error ? e.message : '操作失败'); }
+    finally { setPending(false); }
+  };
 
-  if (!q) return <p className="muted">{error || '加载中…'}</p>;
+  if (!q) return <div role={error ? 'alert' : 'status'}><p>{error || '加载中…'}</p>{error && <button onClick={load}>重新加载</button>}</div>;
 
   const canManage = q.permissions.canManage;
 
@@ -39,22 +51,16 @@ export function QuestionDetailPage() {
 
         <div className="post">
           <div className="votebox">
-            <button disabled={!me} onClick={() => act(() => api.vote('QUESTION', q.id, q.myVote === 1 ? 0 : 1))}>▲</button>
+            <button disabled={!me || pending} onClick={() => act(() => api.vote('QUESTION', q.id, q.myVote === 1 ? 0 : 1))} aria-label="赞同">▲</button>
             <b>{q.score}</b>
-            <button disabled={!me} onClick={() => act(() => api.vote('QUESTION', q.id, q.myVote === -1 ? 0 : -1))}>▼</button>
+            <button disabled={!me || pending} onClick={() => act(() => api.vote('QUESTION', q.id, q.myVote === -1 ? 0 : -1))} aria-label="反对">▼</button>
           </div>
           <div className="body">
             {/* 正文由后端渲染并经 commonmark + OWASP Sanitizer 双重净化 */}
             <div dangerouslySetInnerHTML={{ __html: q.bodyHtml }} />
             <div className="tagrow">{q.tags.map((t) => <span key={t} className="tag">{t}</span>)}</div>
             <CommentList comments={q.comments} targetType="QUESTION" targetId={q.id} onDone={load} canComment={!!me} />
-            {canManage && (
-              <button className="link" onClick={() => {
-                const points = Number(prompt('悬赏积分（10–500）', '50'));
-                if (points) act(() => api.bounty(q.id, points, 7));
-              }}>发起悬赏
-              </button>
-            )}
+            <BountyPanel key={q.id} questionId={q.id} canManage={canManage} />
           </div>
         </div>
 
@@ -62,9 +68,9 @@ export function QuestionDetailPage() {
         {q.answers.map((a) => (
           <div className={`post ${q.acceptedAnswerId === a.id ? 'is-accepted' : ''}`} key={a.id} id={`answer-${a.id}`}>
             <div className="votebox">
-              <button disabled={!me} onClick={() => act(() => api.vote('ANSWER', a.id, a.myVote === 1 ? 0 : 1))}>▲</button>
+              <button disabled={!me || pending} onClick={() => act(() => api.vote('ANSWER', a.id, a.myVote === 1 ? 0 : 1))} aria-label="赞同">▲</button>
               <b>{a.score}</b>
-              <button disabled={!me} onClick={() => act(() => api.vote('ANSWER', a.id, a.myVote === -1 ? 0 : -1))}>▼</button>
+              <button disabled={!me || pending} onClick={() => act(() => api.vote('ANSWER', a.id, a.myVote === -1 ? 0 : -1))} aria-label="反对">▼</button>
               {q.acceptedAnswerId === a.id && <span className="check-mark" title="已采纳">✔</span>}
             </div>
             <div className="body">
@@ -76,8 +82,8 @@ export function QuestionDetailPage() {
               </p>
               <div className="actions">
                 {q.permissions.canAccept && !q.acceptedAnswerId &&
-                  <button onClick={() => act(() => api.accept(q.id, a.id))}>采纳此回答</button>}
-                {canManage && !a.endorsedBy && <button onClick={() => act(() => api.endorse(a.id))}>教师认证</button>}
+                  <button disabled={pending} onClick={() => act(() => api.accept(q.id, a.id))}>采纳此回答</button>}
+                {canManage && !a.endorsedBy && <button disabled={pending} onClick={() => act(() => api.endorse(a.id))}>教师认证</button>}
               </div>
               <CommentList comments={a.comments} targetType="ANSWER" targetId={a.id} onDone={load} canComment={!!me} />
             </div>
@@ -87,16 +93,15 @@ export function QuestionDetailPage() {
         {me ? (
           <section className="answer-form">
             <h3>写回答</h3>
-            <textarea rows={8} value={draft} onChange={(e) => setDraft(e.target.value)}
-                      placeholder="支持 Markdown，代码请使用 ``` 包裹" />
-            <button className="primary" onClick={() => act(async () => {
+            <MarkdownEditor value={draft} onChange={setDraft} disabled={pending} />
+            <button className="primary" disabled={pending || !draft.trim()} onClick={() => act(async () => {
               await api.answer(q.id, draft);
               setDraft('');
             })}>提交回答
             </button>
           </section>
         ) : <p className="muted"><Link to="/login">登录</Link>后可以回答与投票。</p>}
-        {error && <p className="error">{error}</p>}
+        {error && <p role="alert" className="error">{error}</p>}
       </article>
 
       <aside>
@@ -119,8 +124,11 @@ function CommentList({ comments, targetType, targetId, onDone, canComment }: {
 }) {
   const [text, setText] = useState('');
   const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
   return (
     <div className="comments">
+      {error && <p className="error" role="alert">{error}</p>}
       {comments.map((c) => (
         <div className="comment" key={c.id}>
           <span>{c.body}</span>
@@ -129,8 +137,13 @@ function CommentList({ comments, targetType, targetId, onDone, canComment }: {
       ))}
       {canComment && (open ? (
         <div className="comment-form">
-          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="评论，可用 @昵称 提醒他人" />
-          <button onClick={() => api.comment(targetType, targetId, text).then(() => { setText(''); setOpen(false); onDone(); })}>
+          <input aria-label="评论内容" maxLength={600} disabled={pending} value={text} onChange={(e) => setText(e.target.value)} placeholder="评论，可用 @昵称 提醒他人" />
+          <button disabled={pending || !text.trim()} onClick={async () => {
+            setPending(true); setError('');
+            try { await api.comment(targetType, targetId, text.trim()); setText(''); setOpen(false); onDone(); }
+            catch (e) { setError(e instanceof Error ? e.message : '评论发布失败'); }
+            finally { setPending(false); }
+          }}>
             发表
           </button>
         </div>

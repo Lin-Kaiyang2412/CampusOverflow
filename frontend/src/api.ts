@@ -1,5 +1,5 @@
 import type {
-  LeaderboardEntry, Me, Notification, Page, QuestionDetail, QuestionSummary, ReputationProfile, SearchResult,
+  Bounty, LeaderboardEntry, Me, Notification, Page, QuestionDetail, QuestionSummary, ReputationProfile, SearchResult,
 } from './types';
 
 /** 后端以 RFC 9457 Problem Details 返回错误，这里统一转成带业务码的异常。 */
@@ -25,15 +25,22 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     }
     if (token) headers['X-XSRF-TOKEN'] = decodeURIComponent(token);
   }
-  const res = await fetch(`/api${path}`, {
-    method, headers, credentials: 'include',
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`/api${path}`, {
+      method, headers, credentials: 'include',
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError(0, 'NETWORK', '无法连接服务，请检查网络或确认后端已启动。');
+  }
   if (res.status === 204) return undefined as T;
   const text = await res.text();
-  const data = text ? JSON.parse(text) : undefined;
+  let data;
+  try { data = text ? JSON.parse(text) : undefined; }
+  catch { throw new ApiError(res.status, 'INVALID_RESPONSE', '服务返回异常，请稍后重试或联系管理员。'); }
   if (!res.ok) {
-    throw new ApiError(res.status, data?.code ?? 'SYS-000', data?.detail ?? '请求失败');
+    throw new ApiError(res.status, data?.code ?? 'SYS-000', data?.detail ?? (res.status >= 500 ? '服务暂不可用，请确认后端已启动后重试。' : `请求失败（${res.status}）`));
   }
   return data as T;
 }
@@ -79,7 +86,8 @@ export const api = {
   bounty: (questionId: number, points: number, days: number) =>
     request<{ id: number }>('POST', `/v1/questions/${questionId}/bounty`, { points, days }),
 
-  notifications: () => get<Page<Notification>>('/v1/notifications'),
+  latestBounty: (questionId: number) => get<Bounty | undefined>(`/v1/questions/${questionId}/bounty`),
+  notifications: (page = 1) => get<Page<Notification>>(`/v1/notifications?page=${page}`),
   unreadCount: () => get<{ count: number }>('/v1/notifications/unread-count'),
   readAll: () => request<{ updated: number }>('POST', '/v1/notifications/read-all', {}),
 };

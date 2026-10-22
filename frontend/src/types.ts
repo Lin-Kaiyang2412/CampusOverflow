@@ -37,3 +37,5 @@ export interface ReputationProfile {
   userId: number; displayName: string; reputation: number; availablePoints?: number; frozenPoints?: number;
   badges: { code: string; name: string; description: string; awardedAt: string }[];
 }
+
+export interface Bounty { id: number; questionId: number; points: number; status: string; expiresAt: string }

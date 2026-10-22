@@ -71,3 +71,36 @@ article h1 { font-size: 24px; margin-bottom: 4px; }
 .plain li { padding: 6px 0; border-bottom: 1px solid var(--line); }
 .muted { color: var(--muted); }
 .error { color: var(--danger); }
+
+/* 问题列表在窄屏和长文本下保持可读。 */
+.layout > section, .qmain { min-width: 0; }
+.qmain { overflow-wrap: anywhere; }
+.list-state { padding: 24px 16px; background: #fff; border: 1px solid var(--line); border-radius: 8px; }
+.list-state p { margin-top: 0; }
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
+@media (max-width: 600px) {
+  .topbar { flex-wrap: wrap; gap: 12px; padding: 12px 16px; }
+  .topbar .user { flex-wrap: wrap; }
+  .toolbar input:not([type]) { min-width: 0; flex-basis: 100%; width: 100%; }
+  .qlist li { flex-direction: column; gap: 8px; padding: 12px; }
+  .qlist .stats { flex-direction: row; flex-wrap: wrap; gap: 12px; text-align: left; }
+}
+
+.pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; margin-top: 20px; }
+button:disabled { cursor: not-allowed; opacity: 0.5; }
+button:disabled:hover { border-color: var(--line); }
+
+dialog { width: min(480px, calc(100% - 32px)); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+dialog::backdrop { background: rgb(0 0 0 / 40%); }
+.editor-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.editor-columns textarea { width: 100%; resize: vertical; }
+.markdown-preview { border: 1px solid var(--line); border-radius: 6px; padding: 12px; overflow-wrap: anywhere; max-height: 480px; overflow: auto; }
+.markdown-preview blockquote { border-left: 3px solid var(--brand); margin-left: 0; padding-left: 12px; color: var(--muted); }
+.preview-list-item { margin: 4px 0; }
+.syntax-keyword { color: #9c238a; font-weight: 600; }
+.syntax-string { color: #126137; }
+.syntax-number { color: #1759aa; }
+.bounty-panel { margin-top: 12px; }
+.actions, .tabs { flex-wrap: wrap; }
+@media (max-width: 760px) { .editor-columns { grid-template-columns: minmax(0, 1fr); } }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
