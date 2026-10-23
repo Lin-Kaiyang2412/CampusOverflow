@@ -69,6 +69,11 @@ services:
     depends_on:
       backend: { condition: service_started }
     ports: ["80:80"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
   prometheus:
     image: prom/prometheus:v2.54.1
@@ -85,7 +90,10 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
     depends_on: [prometheus]
     ports: ["3000:3000"]
-    volumes: ["grafana-data:/var/lib/grafana"]
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
 
 volumes:
   mysql-data:
