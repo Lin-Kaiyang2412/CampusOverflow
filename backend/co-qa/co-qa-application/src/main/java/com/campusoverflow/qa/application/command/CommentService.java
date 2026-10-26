@@ -37,7 +37,29 @@ public class CommentService {
 
     @Transactional
     public long post(Actor actor, PostCommentCommand cmd) {
-        // TODO(S2)：实现 CommentService.post——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：CommentService.post 尚未实现");
+        long questionId;
+        if (cmd.targetType() == TargetType.QUESTION) {
+            Question question = questions.findById(cmd.targetId())
+                    .orElseThrow(() -> new NotFoundException("QUESTION_NOT_FOUND", "问题不存在，id=" + cmd.targetId()));
+            questionId = question.id();
+        } else if (cmd.targetType() == TargetType.ANSWER) {
+            Answer answer = answers.findById(cmd.targetId())
+                    .orElseThrow(() -> new NotFoundException("ANSWER_NOT_FOUND", "回答不存在，id=" + cmd.targetId()));
+            questionId = answer.questionId();
+        } else {
+            throw new NotFoundException("COMMENT_TARGET_NOT_FOUND", "评论目标不存在");
+        }
+
+        Comment parent = null;
+        if (cmd.parentId() != null) {
+            parent = comments.findById(cmd.parentId())
+                    .orElseThrow(() -> new NotFoundException("COMMENT_NOT_FOUND", "父评论不存在，id=" + cmd.parentId()));
+        }
+
+        Comment saved = comments.save(Comment.post(cmd.targetType(), cmd.targetId(), questionId, actor.userId(),
+                parent, cmd.body(), clock.instant()));
+        events.publish(new CommentPostedEvent(EventIds.next(), saved.createdAt(), saved.id(), saved.questionId(),
+                saved.authorId(), saved.body()));
+        return saved.id();
     }
 }

@@ -36,53 +36,68 @@ public class NotificationProjector {
     @EventListener
     @Transactional
     public void on(AnswerSubmittedEvent e) {
-        // TODO(S3)：实现 NotificationProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.on 尚未实现");
+        if (e.questionAuthorId() != e.answerAuthorId()) {
+            notify(e.questionAuthorId(), NotificationType.ANSWER_RECEIVED,
+                    name(e.answerAuthorId()) + " 回答了你的问题《" + e.questionTitle() + "》",
+                    "/questions/" + e.questionId(), e.eventId(), e.occurredAt());
+        }
     }
 
     @EventListener
     @Transactional
     public void on(AnswerAcceptedEvent e) {
-        // TODO(S3)：实现 NotificationProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.on 尚未实现");
+        if (e.answerAuthorId() != e.acceptedById()) {
+            notify(e.answerAuthorId(), NotificationType.ANSWER_ACCEPTED,
+                    "你的回答在问题《" + e.questionTitle() + "》中被采纳",
+                    "/questions/" + e.questionId(), e.eventId(), e.occurredAt());
+        }
     }
 
     @EventListener
     @Transactional
     public void on(AnswerEndorsedEvent e) {
-        // TODO(S3)：实现 NotificationProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.on 尚未实现");
+        if (e.answerAuthorId() != e.endorserId()) {
+            notify(e.answerAuthorId(), NotificationType.ANSWER_ENDORSED,
+                    "你的回答在问题《" + e.questionTitle() + "》中获得教师认证",
+                    "/questions/" + e.questionId(), e.eventId(), e.occurredAt());
+        }
     }
 
     @EventListener
     @Transactional
     public void on(CommentPostedEvent e) {
-        // TODO(S3)：实现 NotificationProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.on 尚未实现");
+        String commenter = name(e.authorId());
+        for (String displayName : MentionParser.extract(e.body())) {
+            Optional<UserSummary> mentioned = identity.findByDisplayName(displayName);
+            if (mentioned.isPresent() && mentioned.get().id() != e.authorId()) {
+                notify(mentioned.get().id(), NotificationType.MENTIONED,
+                        commenter + " 在评论中提到了你", "/questions/" + e.questionId(), e.eventId(), e.occurredAt());
+            }
+        }
     }
 
     @EventListener
     @Transactional
     public void on(BountyAwardedEvent e) {
-        // TODO(S3)：实现 NotificationProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.on 尚未实现");
+        notify(e.winnerId(), NotificationType.BOUNTY_AWARDED, "你获得了 " + e.points() + " 积分悬赏",
+                "/questions/" + e.questionId(), e.eventId(), e.occurredAt());
     }
 
     @EventListener
     @Transactional
     public void on(BadgeAwardedEvent e) {
-        // TODO(S3)：实现 NotificationProjector.on——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.on 尚未实现");
+        notify(e.userId(), NotificationType.BADGE_AWARDED, "你获得了徽章「" + e.badgeName() + "」",
+                "/users/" + e.userId() + "/reputation", e.eventId(), e.occurredAt());
     }
 
     private void notify(long recipientId, NotificationType type, String title, String link, String eventId,
                         java.time.Instant at) {
-        // TODO(S3)：实现 NotificationProjector.notify——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.notify 尚未实现");
+        if (!notifications.exists(eventId, recipientId)) {
+            notifications.save(Notification.create(recipientId, type, title, link, eventId, at));
+        }
     }
 
     private String name(long userId) {
-        // TODO(S3)：实现 NotificationProjector.name——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：NotificationProjector.name 尚未实现");
+        return identity.findUser(userId).map(UserSummary::displayName).orElse("已注销用户");
     }
 }
