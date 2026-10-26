@@ -1,3 +1,4 @@
+
 package com.campusoverflow.qa.domain;
 
 import com.campusoverflow.shared.domain.BusinessRuleException;
@@ -24,8 +25,12 @@ public class Vote {
 
     public static Vote cast(long voterId, long targetAuthorId, TargetType targetType, long targetId, int value,
                             Instant now) {
-        // TODO(S2)：实现 Vote.cast——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：Vote.cast 尚未实现");
+        if (voterId == targetAuthorId) {
+            throw new BusinessRuleException("QA-1015", "不能给自己的内容投票");
+        }
+
+        int checkedValue = checkValue(value);
+        return new Vote(null, voterId, targetType, targetId, checkedValue, now);
     }
 
     public static Vote reconstitute(Long id, long voterId, TargetType targetType, long targetId, int value,
@@ -35,13 +40,18 @@ public class Vote {
 
     /** 改投，返回原值。 */
     public int change(int newValue, Instant now) {
-        // TODO(S2)：实现 Vote.change——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：Vote.change 尚未实现");
+        int checkedValue = checkValue(newValue);
+        int oldValue = this.value;
+        this.value = checkedValue;
+        this.updatedAt = now;
+        return oldValue;
     }
 
     private static int checkValue(int value) {
-        // TODO(S2)：实现 Vote.checkValue——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：Vote.checkValue 尚未实现");
+        if (value != 1 && value != -1) {
+            throw new BusinessRuleException("QA-1001", "投票值必须为 +1 或 -1");
+        }
+        return value;
     }
 
     public void assignId(long id) {

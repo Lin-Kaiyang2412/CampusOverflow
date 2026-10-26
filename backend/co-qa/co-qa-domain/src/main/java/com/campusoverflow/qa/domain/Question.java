@@ -53,43 +53,113 @@ public class Question {
         this.version = version;
     }
 
-    public static Question post(long authorId, Long courseId, Title title, MarkdownBody body, Tags tags, Instant now) {
-        // TODO(S2)：实现 Question.post——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：Question.post 尚未实现");
+    public static Question post(long authorId, Long courseId, Title title, MarkdownBody body,
+                                Tags tags, Instant now) {
+        Objects.requireNonNull(now, "发布时间不能为空");
+
+        return new Question(
+                null,
+                authorId,
+                courseId,
+                title,
+                body,
+                tags,
+                null,
+                0,
+                0,
+                0,
+                now,
+                now,
+                null,
+                0
+        );
     }
 
-    public static Question reconstitute(Long id, long authorId, Long courseId, Title title, MarkdownBody body,
-                                        Tags tags, Long acceptedAnswerId, int score, int answerCount, int viewCount,
-                                        Instant createdAt, Instant updatedAt, Instant deletedAt, long version) {
-        return new Question(id, authorId, courseId, title, body, tags, acceptedAnswerId, score, answerCount,
-                viewCount, createdAt, updatedAt, deletedAt, version);
+    public static Question reconstitute(Long id, long authorId, Long courseId, Title title,
+                                        MarkdownBody body, Tags tags, Long acceptedAnswerId,
+                                        int score, int answerCount, int viewCount, Instant createdAt,
+                                        Instant updatedAt, Instant deletedAt, long version) {
+        return new Question(id, authorId, courseId, title, body, tags, acceptedAnswerId,
+                score, answerCount, viewCount, createdAt, updatedAt, deletedAt, version);
     }
 
-    public void edit(Actor actor, boolean actorManagesCourse, Title newTitle, MarkdownBody newBody, Tags newTags,
-                     Instant now) {
-        // TODO(S2)：实现 Question.edit——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：Question.edit 尚未实现");
+    public void edit(Actor actor, boolean actorManagesCourse, Title newTitle,
+                     MarkdownBody newBody, Tags newTags, Instant now) {
+        Objects.requireNonNull(actor, "操作者不能为空");
+        Objects.requireNonNull(now, "更新时间不能为空");
+
+        ensureNotDeleted();
+
+        if (!actor.is(authorId) && !actorManagesCourse) {
+            throw new ForbiddenException("QA-1003", "只有提问者或课程管理者可以编辑问题");
+        }
+
+        this.title = Objects.requireNonNull(newTitle, "标题不能为空");
+        this.body = Objects.requireNonNull(newBody, "正文不能为空");
+        this.tags = Objects.requireNonNull(newTags, "标签不能为空");
+        this.updatedAt = now;
     }
 
     /** 采纳最佳答案。 */
     public void accept(Answer answer, Actor actor, boolean actorManagesCourse) {
-        // TODO(S2)：实现 Question.accept——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：Question.accept 尚未实现");
+        Objects.requireNonNull(actor, "操作者不能为空");
+
+        ensureNotDeleted();
+
+        if (!actor.is(authorId) && !actorManagesCourse) {
+            throw new ForbiddenException("QA-3001", "只有提问者或课程管理者可以采纳答案");
+        }
+
+        Objects.requireNonNull(answer, "答案不能为空");
+
+        if (answer.isDeleted()) {
+            throw new BusinessRuleException("QA-2002", "已删除的回答不能被采纳");
+        }
+
+        if (id == null || answer.questionId() != id.longValue()) {
+            throw new BusinessRuleException("QA-2002", "只能采纳当前问题下的回答");
+        }
+
+        if (acceptedAnswerId != null) {
+            throw new ConflictException("QA-2002", "问题已经采纳了一个答案");
+        }
+
+        if (answer.id() == null) {
+            throw new BusinessRuleException("QA-2002", "尚未分配 ID 的回答不能被采纳");
+        }
+
+        acceptedAnswerId = answer.id();
     }
 
     public void softDelete(Actor actor, boolean actorManagesCourse, Instant now) {
-        // TODO(S2)：实现 Question.softDelete——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：Question.softDelete 尚未实现");
+        Objects.requireNonNull(actor, "操作者不能为空");
+        Objects.requireNonNull(now, "删除时间不能为空");
+
+        ensureNotDeleted();
+
+        if (!actor.is(authorId) && !actorManagesCourse) {
+            throw new ForbiddenException("QA-1003", "只有提问者或课程管理者可以删除问题");
+        }
+
+        if (!actorManagesCourse && answerCount > 0) {
+            throw new BusinessRuleException("QA-1004", "已有回答的问题不能由提问者删除");
+        }
+
+        deletedAt = now;
     }
 
     public void ensureOpenForAnswers() {
-        // TODO(S2)：实现 Question.ensureOpenForAnswers——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：Question.ensureOpenForAnswers 尚未实现");
+        ensureNotDeleted();
+
+        if (acceptedAnswerId != null) {
+            throw new BusinessRuleException("QA-2002", "问题已采纳答案，不能继续回答");
+        }
     }
 
     private void ensureNotDeleted() {
-        // TODO(S2)：实现 Question.ensureNotDeleted——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：Question.ensureNotDeleted 尚未实现");
+        if (isDeleted()) {
+            throw new BusinessRuleException("QA-1004", "问题已删除，不能继续操作");
+        }
     }
 
     public boolean isDeleted() {

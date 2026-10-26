@@ -67,13 +67,19 @@ class QuestionTest {
         @Test
         void askerCanAcceptAnAnswerOnce() {
             Question q = persistedQuestion();
+
+            // 必须在问题被采纳前创建两个答案。
             Answer a = persistedAnswer(q, OTHER.userId(), 50);
+            Answer b = persistedAnswer(q, 3, 51);
+
             q.accept(a, ASKER, false);
+
             assertThat(q.acceptedAnswerId()).isEqualTo(50L);
             assertThat(q.isAccepted(50)).isTrue();
 
-            Answer b = persistedAnswer(q, 3, 51);
-            assertThatThrownBy(() -> q.accept(b, ASKER, false)).isInstanceOf(ConflictException.class);
+            // 已经采纳一个答案后，再采纳另一个答案应当失败。
+            assertThatThrownBy(() -> q.accept(b, ASKER, false))
+                    .isInstanceOf(ConflictException.class);
         }
 
         @Test
