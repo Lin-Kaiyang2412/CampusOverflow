@@ -1,0 +1,21 @@
+# Alertmanager 配置（Issue #14）
+# 课程环境不接外部通知渠道：告警仍可在 Prometheus /alerts 与 Alertmanager UI(:9093) 查看。
+# 需要真实通知时，取消 receiver 里的 webhook 注释并填地址，然后重启容器。
+route:
+  receiver: default
+  group_by: ["alertname", "component"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: default
+    # webhook_configs:
+    #   - url: https://example.com/campus-overflow/alerts
+    #     send_resolved: true
+
+# critical 触发时抑制同名 warning，避免同一故障刷两条
+inhibit_rules:
+  - source_matchers: ['severity="critical"']
+    target_matchers: ['severity="warning"']
+    equal: ["alertname", "component"]

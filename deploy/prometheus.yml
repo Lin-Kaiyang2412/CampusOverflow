@@ -1,13 +1,28 @@
 global:
   scrape_interval: 15s
+  # 告警规则的求值周期；规则里的 for 时长以此为最小粒度
+  evaluation_interval: 30s
+  external_labels:
+    service: campus-overflow
+
+# 告警规则（Issue #14）：阈值与 docs/ops/运维手册.md §7.2 逐条对应
+rule_files:
+  - /etc/prometheus/alert-rules.yml
+
+# 告警投递；alertmanager 由 compose 的 observability profile 一并启动
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
 
 scrape_configs:
   - job_name: campus-overflow
     metrics_path: /actuator/prometheus
     static_configs:
       - targets: ["backend:8080"]
-# 建议在 Grafana 中关注的自定义指标：
-#   co_outbox_backlog        发件箱积压（>100 持续 5 分钟应告警）
-#   co_outbox_dead_letters   死信事件数（>0 即需人工介入）
+
+# Grafana 面板与告警共同关注的自定义指标：
+#   co_outbox_backlog        发件箱积压（>100 持续 5 分钟告警）
+#   co_outbox_dead_letters   死信事件数（>0 立即人工介入）
 #   co_reputation_mismatches 声誉对账不一致账户数（FF-8，应恒为 0）
 #   http_server_requests_seconds{uri="/api/v1/questions/{questionId}"}  详情页 P95（QS-01 ≤ 300ms）

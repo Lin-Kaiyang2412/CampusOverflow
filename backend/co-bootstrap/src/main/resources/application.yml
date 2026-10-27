@@ -71,6 +71,14 @@ management:
   metrics:
     tags:
       application: campus-overflow
+    distribution:
+      # HTTP 延迟 P95 告警依赖直方图桶：不开这个只会有 _sum/_count，没有 _bucket，
+      # histogram_quantile() 取不到数据，延迟类告警永远不触发（Issue #14）
+      percentiles-histogram:
+        http.server.requests: true
+      # 按运维手册 §7.2 的阈值再显式加几个 SLO 桶：300ms（QS-01）/ 500ms（Lab 8 告警线）/ 1s
+      slo:
+        http.server.requests: 300ms,500ms,1s
 
 logging:
   level:

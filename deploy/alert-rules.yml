@@ -1,0 +1,129 @@
+# CampusOverflow 告警规则（Issue #14）
+# 阈值与 docs/ops/运维手册.md §7.2「核心指标与阈值」逐条对应，改动请同步那张表。
+# 校验：promtool check rules deploy/alert-rules.yml
+groups:
+  - name: campus-overflow-availability
+    interval: 30s
+    rules:
+      - alert: BackendDown
+        expr: up{job="campus-overflow"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: backend
+        annotations:
+          summary: "后端实例不可达（up=0）"
+          description: "Prometheus 连续 1 分钟无法抓取 backend:8080/actuator/prometheus。先执行 docker compose ps 与 docker logs co-backend。"
+          runbook: "docs/ops/运维手册.md §8 故障处置"
+
+  - name: campus-overflow-http
+    interval: 30s
+    rules:
+      # Lab 8 要求：5xx 错误率 > 1%
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_server_requests_seconds_count{job="campus-overflow", status=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(http_server_requests_seconds_count{job="campus-overflow"}[5m])), 0.001)
+          ) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "5xx 错误率超过 1%"
+          description: "最近 5 分钟 5xx 占比 {{ $value | humanizePercentage }}（阈值 1%）。查 /actuator/health 与后端异常栈，注意 QA-4xxx 属业务 404，不应计入 5xx。"
+
+      # Lab 8 要求：P95 > 500ms
+      - alert: HighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_server_requests_seconds_bucket{job="campus-overflow"}[5m]))
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "接口 P95 延迟超过 500ms"
+          description: "全局 P95 = {{ $value | humanizeDuration }}（阈值 500ms）。该规则依赖 application.yml 中 management.metrics.distribution.percentiles-histogram.http.server.requests=true，否则 _bucket 序列不存在、规则永远不触发。"
+
+      # 运维手册 §7.2：详情页 P95 ≤ 300ms（QS-01）
+      - alert: QuestionDetailP95Slow
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_server_requests_seconds_bucket{job="campus-overflow", uri="/api/v1/questions/{questionId}"}[5m]))
+          ) > 0.3
+        for: 10m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "问答详情页 P95 超过 300ms（QS-01）"
+          description: "详情页 P95 = {{ $value | humanizeDuration }}。常见原因：问题列表缓存失效（QuestionListCache）、回答/评论查询未走索引。"
+
+  - name: campus-overflow-pipeline
+    interval: 30s
+    rules:
+      # 运维手册 §7.2：发件箱积压 > 100 持续 5 分钟
+      - alert: OutboxBacklogHigh
+        expr: co_outbox_backlog{job="campus-overflow"} > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: outbox
+        annotations:
+          summary: "事务性发件箱积压 {{ $value }} 条"
+          description: "OutboxRelay 消费速度跟不上写入。检查 OutboxRelay 日志与下游事件处理器（声誉/通知/搜索索引）是否报错重试。"
+
+      # 运维手册 §7.2：死信 > 0 立即人工介入
+      - alert: OutboxDeadLetterPresent
+        expr: co_outbox_dead_letters{job="campus-overflow"} > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: outbox
+        annotations:
+          summary: "出现死信事件 {{ $value }} 条"
+          description: "事件重试次数已超上限，下游投影不再前进。需人工核对 co_outbox 中 attempts >= 上限的记录并补偿。"
+
+      # 适应度函数 FF-8：对账不一致应恒为 0
+      - alert: ReputationLedgerMismatch
+        expr: co_reputation_mismatches{job="campus-overflow"} > 0
+        for: 5m
+        labels:
+          severity: critical
+          component: reputation
+        annotations:
+          summary: "声誉账本对账不一致账户 {{ $value }} 个（FF-8）"
+          description: "账户余额与账本流水累加不符，属数据损坏。执行 ReconciliationService.reconcile() 并比对 co_reputation_ledger 唯一键是否被绕过。"
+
+  - name: campus-overflow-resources
+    interval: 30s
+    rules:
+      # 运维手册 §7.2：JVM 堆 > 85% 持续 10 分钟
+      - alert: JvmHeapHigh
+        expr: |
+          sum(jvm_memory_used_bytes{job="campus-overflow", area="heap"})
+          /
+          clamp_min(sum(jvm_memory_max_bytes{job="campus-overflow", area="heap"}), 1)
+          > 0.85
+        for: 10m
+        labels:
+          severity: warning
+          component: jvm
+        annotations:
+          summary: "JVM 堆占用超过 85%"
+          description: "当前 {{ $value | humanizePercentage }}。若伴随 GC 时间上升，考虑调小 -Xmx 后的容器限制或排查缓存泄漏（QuestionListCache）。"
+
+      # 运维手册 §7.2：等待连接的请求 > 5 持续 1 分钟
+      - alert: ConnectionPoolSaturated
+        expr: max(hikaricp_connections_pending{job="campus-overflow"}) > 5
+        for: 1m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "HikariCP 连接池打满（{{ $value }} 个请求排队）"
+          description: "检查是否有长事务或未关闭的连接；必要时提高 spring.datasource.hikari.maximum-pool-size，但先确认 MySQL max_connections 余量。"
