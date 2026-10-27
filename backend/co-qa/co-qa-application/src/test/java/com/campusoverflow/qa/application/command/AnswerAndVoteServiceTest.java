@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.campusoverflow.qa.api.event.AnswerAcceptedEvent;
+import com.campusoverflow.qa.api.event.AnswerEndorsedEvent;
 import com.campusoverflow.qa.api.event.AnswerSubmittedEvent;
 import com.campusoverflow.qa.api.event.VoteCastEvent;
 import com.campusoverflow.qa.application.fake.QaTestFixtures.CountingCache;
@@ -19,7 +20,9 @@ import com.campusoverflow.qa.domain.TargetType;
 import com.campusoverflow.qa.domain.Tags;
 import com.campusoverflow.qa.domain.Title;
 import com.campusoverflow.shared.domain.BusinessRuleException;
+import com.campusoverflow.shared.domain.ConflictException;
 import com.campusoverflow.shared.domain.ForbiddenException;
+import com.campusoverflow.shared.domain.NotFoundException;
 import com.campusoverflow.shared.security.Actor;
 import com.campusoverflow.shared.security.Role;
 import java.time.Clock;
@@ -90,6 +93,35 @@ class AnswerAndVoteServiceTest {
         assertThat(accepted.get(0).answerAuthorId()).isEqualTo(hong.userId());
         assertThat(accepted.get(0).acceptedById()).isEqualTo(ming.userId());
         assertThat(audit.actions).contains("ANSWER_ACCEPTED");
+    }
+
+    @Test
+    @DisplayName("教师认证：发布事件且重复认证会被拒绝")
+    void endorsePublishesEventAndRejectsDuplicate() {
+        long answerId = answerService.submit(hong, questionId, "关键在于黑高这个不变量，仅靠变色无法调整。");
+        identity.withCourseManager(9);
+        Actor teacher = new Actor(9, "王老师", Role.TEACHER);
+
+        answerService.endorse(teacher, answerId);
+
+        assertThat(events.ofType(AnswerEndorsedEvent.class)).singleElement()
+                .satisfies(event -> assertThat(event.answerId()).isEqualTo(answerId));
+        assertThatThrownBy(() -> answerService.endorse(teacher, answerId))
+                .isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    @DisplayName("问题和回答不存在时返回统一的 4xxx 错误码")
+    void missingQaResourcesUseStandardErrorCodes() {
+        assertThatThrownBy(() -> answerService.submit(hong, 999, "这是一个有效的回答正文。"))
+                .isInstanceOf(NotFoundException.class)
+                .satisfies(e -> assertThat(((NotFoundException) e).code()).isEqualTo("QA-4001"));
+        assertThatThrownBy(() -> answerService.edit(hong, 999, "这是一个有效的回答正文。"))
+                .isInstanceOf(NotFoundException.class)
+                .satisfies(e -> assertThat(((NotFoundException) e).code()).isEqualTo("QA-4002"));
+        assertThatThrownBy(() -> voteService.cast(ming, TargetType.ANSWER, 999, 1))
+                .isInstanceOf(NotFoundException.class)
+                .satisfies(e -> assertThat(((NotFoundException) e).code()).isEqualTo("QA-4002"));
     }
 
     @Test

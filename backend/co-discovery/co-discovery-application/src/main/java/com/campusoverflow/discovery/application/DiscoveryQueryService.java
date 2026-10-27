@@ -29,12 +29,31 @@ public class DiscoveryQueryService {
     }
 
     public PageResult<SearchResultView> search(SearchQuery query) {
-        // TODO(S3)：实现 DiscoveryQueryService.search——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：DiscoveryQueryService.search 尚未实现");
+        PageResult<SearchHit> hits = search.search(query);
+        Map<Long, UserSummary> users = identity.findUsers(hits.items().stream().map(SearchHit::authorId).toList());
+        return hits.map(hit -> {
+            UserSummary user = users.get(hit.authorId());
+            var author = new SearchResultView.Author(hit.authorId(),
+                    user == null ? "已注销用户" : user.displayName(),
+                    user == null ? "STUDENT" : user.role().name(), user != null && user.verified());
+            return new SearchResultView(hit.questionId(), hit.title(), hit.snippet(), hit.tags(), hit.courseId(), author,
+                    hit.score(), hit.answerCount(), hit.accepted(), hit.bountyOpen(), hit.createdAt());
+        });
     }
 
     public List<RelatedQuestionView> related(long questionId, int limit) {
-        // TODO(S3)：实现 DiscoveryQueryService.related——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：DiscoveryQueryService.related 尚未实现");
+        if (limit <= 0) {
+            return List.of();
+        }
+        List<String> ownTags = index.findTags(questionId);
+        if (ownTags.isEmpty()) {
+            return List.of();
+        }
+        var candidates = index.findCandidatesSharingTags(questionId, ownTags, Math.max(limit, limit * 3));
+        return RelatedQuestionPolicy.rank(candidates, ownTags.size(), limit).stream()
+                .map(candidate -> new RelatedQuestionView(candidate.questionId(), candidate.title(),
+                        candidate.answerCount(), candidate.accepted(),
+                        RelatedQuestionPolicy.jaccard(candidate.sharedTags(), ownTags.size(), candidate.tagCount())))
+                .toList();
     }
 }

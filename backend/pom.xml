@@ -35,6 +35,8 @@
         <commonmark.version>0.24.0</commonmark.version>
         <owasp-sanitizer.version>20240325.1</owasp-sanitizer.version>
         <jacoco.version>0.8.12</jacoco.version>
+        <!-- 修复新版 Docker Engine 与 Testcontainers 默认 Docker API 版本不兼容 -->
+        <testcontainers.version>1.21.4</testcontainers.version>
         <!-- 领域层行覆盖率门禁（适应度函数 FF-4）。学生版初始为 0，Sprint 4 前应提升到 0.80 -->
         <domain.coverage.minimum>0</domain.coverage.minimum>
     </properties>
