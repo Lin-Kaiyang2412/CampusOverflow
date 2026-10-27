@@ -32,7 +32,7 @@ public class NotificationService {
     @Transactional
     public void markRead(Actor actor, long notificationId) {
         Notification notification = notifications.findById(notificationId)
-                .orElseThrow(() -> new NotFoundException("NOTIFICATION_NOT_FOUND", "通知不存在，id=" + notificationId));
+                .orElseThrow(() -> new NotFoundException("DIS-4001", "通知不存在，id=" + notificationId));
         notification.markRead(actor.userId());
         notifications.save(notification);
     }

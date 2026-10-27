@@ -20,7 +20,8 @@ class BountyAndAccountTest {
     @Test
     void onlyCourseManagerCanOpenBountyWithinLimits() {
         assertThatThrownBy(() -> Bounty.open(10, true, new Actor(1, "学生", Role.STUDENT), false, 50, 7, NOW))
-                .isInstanceOf(ForbiddenException.class);
+                .isInstanceOf(ForbiddenException.class)
+                .satisfies(ex -> assertThat(((ForbiddenException) ex).code()).isEqualTo("REP-3001"));
         assertThatThrownBy(() -> Bounty.open(10, true, teacher, true, 5, 7, NOW))
                 .isInstanceOf(BusinessRuleException.class);
         assertThatThrownBy(() -> Bounty.open(10, false, teacher, true, 50, 7, NOW))
@@ -57,7 +58,9 @@ class BountyAndAccountTest {
         acc.refundFrozen(200);
         assertThat(acc.availablePoints()).isEqualTo(900);
         assertThat(acc.frozenPoints()).isZero();
-        assertThatThrownBy(() -> acc.freezePoints(901)).isInstanceOf(BusinessRuleException.class);
+        assertThatThrownBy(() -> acc.freezePoints(901))
+                .isInstanceOf(BusinessRuleException.class)
+                .satisfies(ex -> assertThat(((BusinessRuleException) ex).code()).isEqualTo("REP-1002"));
     }
 
     @Test

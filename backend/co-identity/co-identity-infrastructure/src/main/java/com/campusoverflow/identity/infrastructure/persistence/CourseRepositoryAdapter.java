@@ -2,6 +2,7 @@ package com.campusoverflow.identity.infrastructure.persistence;
 
 import com.campusoverflow.identity.domain.Course;
 import com.campusoverflow.identity.domain.CourseMember;
+import com.campusoverflow.identity.domain.CourseMemberStatus;
 import com.campusoverflow.identity.domain.CourseRepository;
 import com.campusoverflow.identity.domain.CourseRole;
 import java.util.List;
@@ -65,19 +66,19 @@ public class CourseRepositoryAdapter implements CourseRepository {
 
     @Override
     public List<CourseMember> findMembers(long courseId) {
-        return members.findByCourseIdAndStatus(courseId, "APPROVED").stream()
+        return members.findByCourseIdAndStatus(courseId, CourseMemberStatus.APPROVED.name()).stream()
                 .map(CourseRepositoryAdapter::toDomain).toList();
     }
 
     @Override
     public List<CourseMember> findPendingMembers(long courseId) {
-        return members.findByCourseIdAndStatus(courseId, "PENDING").stream()
+        return members.findByCourseIdAndStatus(courseId, CourseMemberStatus.PENDING.name()).stream()
                 .map(CourseRepositoryAdapter::toDomain).toList();
     }
 
     @Override
     public List<CourseMember> findMembershipsOfUser(long userId) {
-        return members.findByUserIdAndStatus(userId, "APPROVED").stream()
+        return members.findByUserIdAndStatus(userId, CourseMemberStatus.APPROVED.name()).stream()
                 .map(CourseRepositoryAdapter::toDomain).toList();
     }
 

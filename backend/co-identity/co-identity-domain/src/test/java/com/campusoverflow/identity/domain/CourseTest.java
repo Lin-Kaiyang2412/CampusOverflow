@@ -43,7 +43,8 @@ class CourseTest {
         assertThat(application.status()).isEqualTo(CourseMemberStatus.PENDING);
         assertThat(application.isApproved()).isFalse();
         assertThatThrownBy(() -> application.changeRole(CourseRole.TA))
-                .isInstanceOf(BusinessRuleException.class);
+                .isInstanceOf(BusinessRuleException.class)
+                .satisfies(ex -> assertThat(((BusinessRuleException) ex).code()).isEqualTo("ID-1015"));
 
         application.approve();
 

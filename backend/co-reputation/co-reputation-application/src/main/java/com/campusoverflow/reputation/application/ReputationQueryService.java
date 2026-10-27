@@ -33,7 +33,7 @@ public class ReputationQueryService {
 
     public ReputationProfileView profile(long userId, Actor viewerOrNull) {
         UserSummary user = identity.findUser(userId)
-                .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND", "用户不存在，id=" + userId));
+                .orElseThrow(() -> new NotFoundException("REP-4002", "用户不存在，id=" + userId));
         ReputationAccount account = accounts.findByUserId(userId)
                 .orElseGet(() -> ReputationAccount.open(userId, 0));
         boolean canSeePoints = viewerOrNull != null && (viewerOrNull.is(userId) || viewerOrNull.isAdmin());
@@ -49,7 +49,7 @@ public class ReputationQueryService {
     /** 声誉流水属于个人数据：仅本人与管理员可查看。 */
     public PageResult<LedgerEntryView> ledger(long userId, Actor viewer, PageRequest page) {
         if (!viewer.is(userId) && !viewer.isAdmin()) {
-            throw new ForbiddenException("REPUTATION_LEDGER_FORBIDDEN", "只能查看本人的声誉流水");
+            throw new ForbiddenException("REP-3002", "只能查看本人的声誉流水");
         }
         return ledger.findByUser(userId, page).map(entry -> new LedgerEntryView(entry.id(), entry.reason().name(),
                 entry.reason().label(), entry.delta(), entry.refType(), entry.refId(), entry.createdAt()));

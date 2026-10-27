@@ -46,23 +46,23 @@ public class Bounty {
                 || !(sponsor.role() == com.campusoverflow.shared.security.Role.TEACHER
                 || sponsor.role() == com.campusoverflow.shared.security.Role.TA
                 || sponsor.role() == com.campusoverflow.shared.security.Role.ADMIN)) {
-            throw new ForbiddenException("BOUNTY_FORBIDDEN", "只有课程管理者可以发起悬赏");
+            throw new ForbiddenException("REP-3001", "只有课程管理者可以发起悬赏");
         }
 
         if (questionId <= 0 || !questionOpen) {
-            throw new BusinessRuleException("QUESTION_NOT_OPEN", "问题不存在、已删除或已被采纳");
+            throw new BusinessRuleException("REP-1011", "问题不存在、已删除或已被采纳");
         }
 
         if (points < MIN_POINTS || points > MAX_POINTS) {
-            throw new BusinessRuleException("INVALID_BOUNTY_POINTS", "悬赏积分必须在 10 到 500 之间");
+            throw new BusinessRuleException("REP-1003", "悬赏积分必须在 10 到 500 之间");
         }
 
         if (days < 1 || days > MAX_DAYS) {
-            throw new BusinessRuleException("INVALID_BOUNTY_DAYS", "悬赏期限必须在 1 到 14 天之间");
+            throw new BusinessRuleException("REP-1004", "悬赏期限必须在 1 到 14 天之间");
         }
 
         if (now == null) {
-            throw new BusinessRuleException("INVALID_BOUNTY_TIME", "发起时间不能为空");
+            throw new BusinessRuleException("REP-1005", "发起时间不能为空");
         }
 
         return new Bounty(null, questionId, sponsor.userId(), points,
@@ -82,15 +82,15 @@ public class Bounty {
         ensureOpen();
 
         if (answerId <= 0 || winnerId <= 0 || now == null) {
-            throw new BusinessRuleException("INVALID_BOUNTY_AWARD", "获奖回答、用户或时间不合法");
+            throw new BusinessRuleException("REP-1006", "获奖回答、用户或时间不合法");
         }
 
         if (winnerId == sponsorId) {
-            throw new BusinessRuleException("SELF_BOUNTY_AWARD", "发起人不能获得自己的悬赏");
+            throw new BusinessRuleException("REP-1007", "发起人不能获得自己的悬赏");
         }
 
         if (isDue(now)) {
-            throw new ConflictException("BOUNTY_EXPIRED", "悬赏已到期，不能再结算");
+            throw new ConflictException("REP-2002", "悬赏已到期，不能再结算");
         }
 
         this.answerId = answerId;
@@ -106,7 +106,7 @@ public class Bounty {
         ensureOpen();
 
         if (now == null) {
-            throw new BusinessRuleException("INVALID_BOUNTY_TIME", "关闭时间不能为空");
+            throw new BusinessRuleException("REP-1005", "关闭时间不能为空");
         }
 
         this.status = BountyStatus.EXPIRED;
@@ -119,7 +119,7 @@ public class Bounty {
 
     private void ensureOpen() {
         if (status != BountyStatus.OPEN) {
-            throw new ConflictException("BOUNTY_NOT_OPEN", "悬赏已结束，不能重复操作");
+            throw new ConflictException("REP-2003", "悬赏已结束，不能重复操作");
         }
     }
 

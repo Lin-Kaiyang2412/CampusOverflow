@@ -60,7 +60,7 @@ public class CourseMember {
     /** 调整课程内角色（如任命助教）。课程教师本人的角色不可被降级。 */
     public void changeRole(CourseRole newRole) {
         if (status != CourseMemberStatus.APPROVED) {
-            throw new BusinessRuleException("ID-1014", "待审核或已拒绝的申请不能调整课程角色");
+            throw new BusinessRuleException("ID-1015", "待审核或已拒绝的申请不能调整课程角色");
         }
         if (role == CourseRole.TEACHER && newRole != CourseRole.TEACHER) {
             throw new BusinessRuleException("ID-1013", "不能修改课程教师的角色");
