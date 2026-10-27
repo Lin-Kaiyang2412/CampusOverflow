@@ -38,6 +38,8 @@ services:
       retries: 20
 
   backend:
+    # CI 部署时由 workflow 注入 BACKEND_IMAGE（ghcr 上的 latest）；本地开发留空则现场 build
+    image: ${BACKEND_IMAGE:-campus-overflow-backend:local}
     build:
       context: ..
       dockerfile: deploy/backend.Dockerfile
@@ -62,6 +64,8 @@ services:
       retries: 30
 
   web:
+    # 同上：CI 注入 WEB_IMAGE，本地开发走 build
+    image: ${WEB_IMAGE:-campus-overflow-web:local}
     build:
       context: ..
       dockerfile: deploy/frontend.Dockerfile
