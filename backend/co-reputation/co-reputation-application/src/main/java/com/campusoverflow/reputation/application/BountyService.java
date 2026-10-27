@@ -22,6 +22,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -67,7 +68,17 @@ public class BountyService {
                 .orElseThrow(() -> new NotFoundException("REPUTATION_ACCOUNT_NOT_FOUND", "声誉账户不存在"));
         sponsor.freezePoints(points);
         accounts.save(sponsor);
-        Bounty saved = bounties.save(bounty);
+        // 先查后写存在并发窗口：两个请求可能同时通过上面的检查。数据库唯一索引
+        // uk_bounty_question_open 是最终裁决，命中即翻译为业务冲突并整体回滚（冻结的积分不扣）。
+        Bounty saved;
+        try {
+            saved = bounties.save(bounty);
+        } catch (DataIntegrityViolationException ex) {
+            if (exceptionChainMessages(ex).contains("uk_bounty_question_open")) {
+                throw new ConflictException("BOUNTY_ALREADY_OPEN", "该问题已有进行中的悬赏");
+            }
+            throw ex;
+        }
         events.publish(new BountyOpenedEvent(EventIds.next(), now, saved.id(), questionId, actor.userId(), points,
                 saved.expiresAt()));
         audit.record("BOUNTY_OPENED", actor.userId(), "BOUNTY", String.valueOf(saved.id()),
@@ -132,5 +143,16 @@ public class BountyService {
         bounties.save(bounty);
         events.publish(new BountyClosedEvent(EventIds.next(), now, bounty.id(), bounty.questionId(),
                 bounty.sponsorId(), bounty.points()));
+    }
+
+    /** 收集异常链上所有 message，按约束名匹配（驱动与方言不同，message 是稳定交集）。 */
+    private static String exceptionChainMessages(Throwable ex) {
+        StringBuilder sb = new StringBuilder();
+        for (Throwable t = ex; t != null && sb.length() < 4096; t = t.getCause()) {
+            if (t.getMessage() != null) {
+                sb.append(t.getMessage()).append('\n');
+            }
+        }
+        return sb.toString();
     }
 }

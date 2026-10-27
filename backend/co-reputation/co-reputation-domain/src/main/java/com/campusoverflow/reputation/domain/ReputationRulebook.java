@@ -38,6 +38,8 @@ public final class ReputationRulebook {
     }
 
     public static int initialPoints(Role role) {
-        return role == Role.TEACHER ? 1000 : 0;
+        // 教师、助教、管理员同为课程管理者且都有悬赏权限，初始积分与教师一致；
+        // 学生无悬赏权限，初始为 0，积分只能来自回答被采纳等贡献。
+        return role == Role.STUDENT ? 0 : 1000;
     }
 }

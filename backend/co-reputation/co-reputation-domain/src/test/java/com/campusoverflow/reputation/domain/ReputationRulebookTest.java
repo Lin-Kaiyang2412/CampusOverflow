@@ -36,8 +36,11 @@ class ReputationRulebookTest {
     }
 
     @Test
-    void teachersStartWithBountyPoints() {
+    void managersStartWithBountyPoints() {
+        // 教师、助教、管理员都有悬赏权限，初始积分应一致；学生无悬赏权限，初始为 0。
         assertThat(ReputationRulebook.initialPoints(Role.TEACHER)).isEqualTo(1000);
+        assertThat(ReputationRulebook.initialPoints(Role.TA)).isEqualTo(1000);
+        assertThat(ReputationRulebook.initialPoints(Role.ADMIN)).isEqualTo(1000);
         assertThat(ReputationRulebook.initialPoints(Role.STUDENT)).isZero();
     }
 }
