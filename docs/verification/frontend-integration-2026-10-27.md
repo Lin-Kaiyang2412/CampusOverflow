@@ -17,7 +17,11 @@
 
 ## 本地运行方式
 
-Mac 终端运行 Spring Boot；MySQL、Redis、Prometheus、Grafana 及验证用 Nginx 运行在 Docker Desktop。完整容器部署仍使用原配置，不以本次混合运行验收替代。
+宿主机终端运行 Spring Boot（本次验收使用 Mac）；MySQL、Redis、Prometheus、Grafana 及验证用 Nginx 运行在 Docker Desktop。完整容器部署仍使用原配置，不以本次混合运行验收替代。
+
+本地监控覆盖配置仅采集指标，不加载告警规则、不向 Alertmanager 发送告警。Grafana 有数据只证明采集与展示链路可用，不代表告警已验证。告警验收需另行准备规则文件、挂载及 Alertmanager 配置。
+
+`host.docker.internal` 适用于 Docker Desktop 的宿主机访问；原生 Linux Docker Engine 需要额外配置 `host-gateway`，本记录未验证该环境。
 
 监控配置覆盖（仓库根目录执行）：
 
@@ -31,7 +35,7 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.local-monit
 docker compose -f deploy/docker-compose.local-web.yml up -d --build
 ```
 
-访问 http://localhost:8088；后端需保持在 Mac 的 8080 端口运行。
+访问 http://localhost:8088；后端需保持在宿主机的 8080 端口运行。
 `nginx.local.conf` 代理到 `host.docker.internal`，原 `nginx.conf` 的 `backend:8080` 保留用于完整容器部署。
 
 ## 待联合验收

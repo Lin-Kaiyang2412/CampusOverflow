@@ -1,4 +1,7 @@
-# 本地联调：Spring Boot 在 Mac 终端运行，Prometheus 在 Docker Desktop 中运行。
+# 本地联调：Spring Boot 在宿主机终端运行，Prometheus 在 Docker Desktop 中运行。
+# 本配置仅采集指标，不加载告警规则，也不向 Alertmanager 发送告警。
+# 验证告警时需另行配置 rule_files、规则文件挂载和 alerting；面板有数据不代表告警已启用。
+# host.docker.internal 适用于 Docker Desktop；原生 Linux Docker Engine 需另配 host-gateway。
 global:
   scrape_interval: 15s
 
@@ -7,7 +10,7 @@ scrape_configs:
     metrics_path: /actuator/prometheus
     static_configs:
       - targets: ["host.docker.internal:8080"]
-# 建议在 Grafana 中关注的自定义指标：
+# 以下为指标及阈值参考，不会由本配置自动触发告警：
 #   co_outbox_backlog        发件箱积压（>100 持续 5 分钟应告警）
 #   co_outbox_dead_letters   死信事件数（>0 即需人工介入）
 #   co_reputation_mismatches 声誉对账不一致账户数（FF-8，应恒为 0）
