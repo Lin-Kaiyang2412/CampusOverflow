@@ -67,6 +67,11 @@ jobs:
         working-directory: frontend
         run: npm run typecheck
 
+      # 阶段 1：静态检查（ESLint flat config，--max-warnings=0 即零容忍）
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint
+
       - name: Build frontend
         working-directory: frontend
         run: npm run build
