@@ -21,7 +21,7 @@ public class ReputationAccount {
 
     public static ReputationAccount open(long userId, int initialPoints) {
         if (userId <= 0 || initialPoints < 0) {
-            throw new BusinessRuleException("INVALID_ACCOUNT", "账户参数不合法");
+            throw new BusinessRuleException("REP-1001", "账户参数不合法");
         }
         return new ReputationAccount(userId, 0, initialPoints, 0, 0);
     }
@@ -36,7 +36,7 @@ public class ReputationAccount {
     public void applyReputation(int delta) {
         long result = (long) reputation + delta;
         if (result < 0 || result > Integer.MAX_VALUE) {
-            throw new BusinessRuleException("INVALID_REPUTATION", "声誉值超出允许范围");
+            throw new BusinessRuleException("REP-1008", "声誉值超出允许范围");
         }
         reputation = (int) result;
     }
@@ -44,7 +44,7 @@ public class ReputationAccount {
     public void freezePoints(int points) {
         requirePositive(points);
         if (availablePoints < points) {
-            throw new BusinessRuleException("INSUFFICIENT_POINTS", "可用悬赏积分不足");
+            throw new BusinessRuleException("REP-1002", "可用悬赏积分不足");
         }
         availablePoints -= points;
         frozenPoints = Math.addExact(frozenPoints, points);
@@ -65,13 +65,13 @@ public class ReputationAccount {
 
     private void ensureFrozen(int points) {
         if (frozenPoints < points) {
-            throw new BusinessRuleException("INSUFFICIENT_FROZEN_POINTS", "冻结积分不足");
+            throw new BusinessRuleException("REP-1009", "冻结积分不足");
         }
     }
 
     private static void requirePositive(int points) {
         if (points <= 0) {
-            throw new BusinessRuleException("INVALID_POINTS", "积分必须大于零");
+            throw new BusinessRuleException("REP-1010", "积分必须大于零");
         }
     }
 

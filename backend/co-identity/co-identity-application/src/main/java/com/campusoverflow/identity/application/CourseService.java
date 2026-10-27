@@ -80,7 +80,8 @@ public class CourseService {
                 .collect(Collectors.toMap(User::id, Function.identity()));
         return pending.stream()
                 .map(m -> new CourseMemberView(m.userId(),
-                        byId.containsKey(m.userId()) ? byId.get(m.userId()).displayName() : "未知用户", m.role()))
+                        byId.containsKey(m.userId()) ? byId.get(m.userId()).displayName() : "未知用户", m.role(),
+                        m.joinedAt()))
                 .toList();
     }
 
@@ -145,7 +146,8 @@ public class CourseService {
                 .collect(Collectors.toMap(User::id, Function.identity()));
         return members.stream()
                 .map(m -> new CourseMemberView(m.userId(),
-                        byId.containsKey(m.userId()) ? byId.get(m.userId()).displayName() : "未知用户", m.role()))
+                        byId.containsKey(m.userId()) ? byId.get(m.userId()).displayName() : "未知用户", m.role(),
+                        m.joinedAt()))
                 .toList();
     }
 

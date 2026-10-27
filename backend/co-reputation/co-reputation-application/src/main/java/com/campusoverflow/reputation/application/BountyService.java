@@ -65,7 +65,7 @@ public class BountyService {
         Bounty bounty = Bounty.open(questionId, !question.deleted() && question.acceptedAnswerId() == null,
                 actor, managesCourse, points, days, now);
         ReputationAccount sponsor = accounts.findByUserId(actor.userId())
-                .orElseThrow(() -> new NotFoundException("REPUTATION_ACCOUNT_NOT_FOUND", "声誉账户不存在"));
+                .orElseThrow(() -> new NotFoundException("REP-4001", "声誉账户不存在"));
         sponsor.freezePoints(points);
         accounts.save(sponsor);
         // 先查后写存在并发窗口：两个请求可能同时通过上面的检查。数据库唯一索引
@@ -74,7 +74,7 @@ public class BountyService {
         try {
             saved = bounties.save(bounty);
         } catch (DataIntegrityViolationException ex) {
-            if (exceptionChainMessages(ex).contains("uk_bounty_question_open")) {
+            if (com.campusoverflow.shared.util.ConstraintViolations.messagesOf(ex).contains("uk_bounty_question_open")) {
                 throw new ConflictException("REP-2001", "该问题已有进行中的悬赏");
             }
             throw ex;
@@ -95,7 +95,7 @@ public class BountyService {
         }
         Bounty bounty = openBounty.get();
         ReputationAccount sponsor = accounts.findByUserId(bounty.sponsorId())
-                .orElseThrow(() -> new NotFoundException("REPUTATION_ACCOUNT_NOT_FOUND", "悬赏发起人账户不存在"));
+                .orElseThrow(() -> new NotFoundException("REP-4001", "悬赏发起人账户不存在"));
         Instant now = clock.instant();
         if (winnerId == bounty.sponsorId() || bounty.isDue(now)) {
             closeAndRefund(bounty, sponsor, now);
@@ -119,7 +119,7 @@ public class BountyService {
         List<Bounty> due = bounties.findDue(now, 100);
         for (Bounty bounty : due) {
             ReputationAccount sponsor = accounts.findByUserId(bounty.sponsorId())
-                    .orElseThrow(() -> new NotFoundException("REPUTATION_ACCOUNT_NOT_FOUND", "悬赏发起人账户不存在"));
+                    .orElseThrow(() -> new NotFoundException("REP-4001", "悬赏发起人账户不存在"));
             closeAndRefund(bounty, sponsor, now);
         }
         return due.size();
@@ -145,14 +145,4 @@ public class BountyService {
                 bounty.sponsorId(), bounty.points()));
     }
 
-    /** 收集异常链上所有 message，按约束名匹配（驱动与方言不同，message 是稳定交集）。 */
-    private static String exceptionChainMessages(Throwable ex) {
-        StringBuilder sb = new StringBuilder();
-        for (Throwable t = ex; t != null && sb.length() < 4096; t = t.getCause()) {
-            if (t.getMessage() != null) {
-                sb.append(t.getMessage()).append('\n');
-            }
-        }
-        return sb.toString();
-    }
 }

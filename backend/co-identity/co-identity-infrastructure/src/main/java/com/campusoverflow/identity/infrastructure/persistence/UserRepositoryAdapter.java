@@ -4,11 +4,13 @@ import com.campusoverflow.identity.domain.User;
 import com.campusoverflow.identity.domain.UserRepository;
 import com.campusoverflow.identity.domain.UserStatus;
 import com.campusoverflow.identity.infrastructure.crypto.FieldEncryptor;
+import com.campusoverflow.shared.domain.ConflictException;
 import com.campusoverflow.shared.page.PageRequest;
 import com.campusoverflow.shared.page.PageResult;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Repository;
@@ -88,7 +90,22 @@ public class UserRepositoryAdapter implements UserRepository {
         e.setVerified(user.verified());
         e.setCollege(user.college());
         e.setClassName(user.className());
-        UserJpaEntity saved = jpa.save(e);
+        // saveAndFlush 让唯一约束冲突在事务内暴露，以便按约束名翻译为业务错误码；
+        // 这是 ensureUnique 先查后写的并发兜底，勿在循环保存的批量路径复用。
+        UserJpaEntity saved;
+        try {
+            saved = jpa.saveAndFlush(e);
+        } catch (DataIntegrityViolationException ex) {
+            String chain = com.campusoverflow.shared.util.ConstraintViolations.messagesOf(ex);
+            if (chain.contains("uk_user_display_name")) {
+                throw new ConflictException("ID-2002", "该昵称已被使用");
+            }
+            if (chain.contains("uk_user_email_hash")) {
+                throw new ConflictException("ID-2003", "该邮箱已被使用");
+            }
+            // 未知约束：保留原始异常，便于排查。
+            throw ex;
+        }
         if (user.id() == null) {
             user.assignId(saved.getId());
         }

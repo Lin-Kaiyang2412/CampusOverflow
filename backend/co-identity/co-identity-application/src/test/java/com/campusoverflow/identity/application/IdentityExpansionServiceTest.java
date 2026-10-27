@@ -78,6 +78,21 @@ class IdentityExpansionServiceTest {
     }
 
     @Test
+    void pendingApplicationsExposeApplicationTimeForSorting() {
+        CourseMember pending = CourseMember.applicant(100, 2, NOW.minusSeconds(3600));
+        when(courses.findPendingMembers(100)).thenReturn(List.of(pending));
+        User applicant = User.register("20230002", "李四", "li@campus.edu", "hash", "学院", "一班", NOW);
+        applicant.assignId(2);
+        when(users.findAllById(List.of(2L))).thenReturn(List.of(applicant));
+
+        List<CourseMemberView> views = courseService.pendingApplications(teacher, 100);
+
+        assertThat(views).hasSize(1);
+        assertThat(views.get(0).joinedAt()).isEqualTo(NOW.minusSeconds(3600));
+        assertThat(views.get(0).displayName()).isEqualTo("李四");
+    }
+
+    @Test
     void profileUpdateChecksUniquenessAndReturnsCurrentView() {
         User user = User.register("20230001", "旧昵称", "old@campus.edu", "hash", "学院", "一班", NOW);
         user.assignId(2);
