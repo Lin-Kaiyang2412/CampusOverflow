@@ -5,8 +5,21 @@
 -- 失败请求冻结的积分随事务回滚，不会扣减。
 
 -- 存量环境可能已有同题多条 OPEN（旧版本并发窗口真实存在），直接加唯一键会让 Flyway 卡死：
--- 先保留每题最早一条 OPEN，其余按 EXPIRED 关闭，消除存量冲突。
--- 被关闭的重复单不自动退款：它们本就不应存在，积分对账由人工核对（数量应为 0 或极少）。
+-- 先按发起人退回重复单冻结的积分，再保留每题最早一条 OPEN，其余按 EXPIRED 关闭。
+-- 必须先退款再关闭，避免冻结积分永久悬挂。
+UPDATE rep_account a
+    JOIN (SELECT b.sponsor_id, SUM(b.points) AS refund
+          FROM rep_bounty b
+          JOIN (SELECT question_id, MIN(id) AS keep_id
+                FROM rep_bounty
+                WHERE status = 'OPEN'
+                GROUP BY question_id
+                HAVING COUNT(*) > 1) d ON d.question_id = b.question_id
+          WHERE b.status = 'OPEN' AND b.id <> d.keep_id
+          GROUP BY b.sponsor_id) r ON r.sponsor_id = a.user_id
+    SET a.frozen_points = a.frozen_points - r.refund,
+        a.available_points = a.available_points + r.refund;
+
 UPDATE rep_bounty b
     JOIN (SELECT question_id, MIN(id) AS keep_id
           FROM rep_bounty

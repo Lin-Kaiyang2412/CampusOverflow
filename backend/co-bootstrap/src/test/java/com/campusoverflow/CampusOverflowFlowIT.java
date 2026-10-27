@@ -19,6 +19,12 @@ import com.campusoverflow.shared.security.Actor;
 import com.campusoverflow.shared.security.Role;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -148,6 +154,74 @@ class CampusOverflowFlowIT {
     }
 
     @Test
+    void 存量重复悬赏迁移先退款再关闭且只给无流水账号补分() throws Exception {
+        String schema = "bounty_migration_test";
+        String serverUrl = mysql.getJdbcUrl().replace("/" + mysql.getDatabaseName(), "/");
+        try (Connection admin = DriverManager.getConnection(serverUrl, "root", mysql.getPassword());
+             Statement adminStatement = admin.createStatement()) {
+            adminStatement.executeUpdate("DROP DATABASE IF EXISTS " + schema);
+            adminStatement.executeUpdate("CREATE DATABASE " + schema + " CHARACTER SET utf8mb4");
+            try (Connection connection = DriverManager.getConnection(serverUrl + schema, "root", mysql.getPassword());
+                 Statement statement = connection.createStatement()) {
+                statement.execute("""
+                        CREATE TABLE rep_account (
+                            user_id BIGINT PRIMARY KEY,
+                            reputation INT NOT NULL DEFAULT 0,
+                            available_points INT NOT NULL DEFAULT 0,
+                            frozen_points INT NOT NULL DEFAULT 0,
+                            version BIGINT NOT NULL DEFAULT 0
+                        )
+                        """);
+                statement.execute("""
+                        CREATE TABLE rep_bounty (
+                            id BIGINT PRIMARY KEY,
+                            question_id BIGINT NOT NULL,
+                            sponsor_id BIGINT NOT NULL,
+                            points INT NOT NULL,
+                            status VARCHAR(16) NOT NULL,
+                            closed_at DATETIME(6) NULL
+                        )
+                        """);
+                statement.execute("""
+                        CREATE TABLE id_user (
+                            id BIGINT PRIMARY KEY,
+                            role VARCHAR(16) NOT NULL
+                        )
+                        """);
+                statement.execute("CREATE TABLE rep_ledger (user_id BIGINT NOT NULL)");
+                statement.executeUpdate("""
+                        INSERT INTO rep_account (user_id, reputation, available_points, frozen_points) VALUES
+                            (1, 0, 950, 50), (10, 0, 0, 0), (11, 5, 0, 0), (12, 5, 0, 0)
+                        """);
+                statement.executeUpdate("""
+                        INSERT INTO rep_bounty (id, question_id, sponsor_id, points, status) VALUES
+                            (1, 100, 1, 20, 'OPEN'), (2, 100, 1, 30, 'OPEN')
+                        """);
+                statement.executeUpdate("INSERT INTO id_user (id, role) VALUES (10, 'TA'), (11, 'ADMIN'), (12, 'ADMIN')");
+                statement.executeUpdate("INSERT INTO rep_ledger (user_id) VALUES (11)");
+
+                runMigration(connection, "db/migration/reputation/V202610270001__bounty_unique_open.sql");
+
+                assertThat(queryString(connection, "SELECT status FROM rep_bounty WHERE id = 1")).isEqualTo("OPEN");
+                assertThat(queryString(connection, "SELECT status FROM rep_bounty WHERE id = 2")).isEqualTo("EXPIRED");
+                assertThat(queryInt(connection, "SELECT available_points FROM rep_account WHERE user_id = 1")).isEqualTo(980);
+                assertThat(queryInt(connection, "SELECT frozen_points FROM rep_account WHERE user_id = 1")).isEqualTo(20);
+                assertThat(queryInt(connection, "SELECT COUNT(DISTINCT index_name) FROM information_schema.statistics "
+                        + "WHERE table_schema = '" + schema + "' AND table_name = 'rep_bounty' "
+                        + "AND index_name = 'uk_bounty_question_open'")).isEqualTo(1);
+
+                runMigration(connection, "db/migration/reputation/V202610270002__backfill_ta_admin_points.sql");
+
+                assertThat(queryInt(connection, "SELECT available_points FROM rep_account WHERE user_id = 10")).isEqualTo(1000);
+                assertThat(queryInt(connection, "SELECT available_points FROM rep_account WHERE user_id = 11")).isZero();
+                assertThat(queryInt(connection, "SELECT available_points FROM rep_account WHERE user_id = 12")).isZero();
+            } finally {
+                adminStatement.executeUpdate("DROP DATABASE IF EXISTS " + schema);
+            }
+        }
+    }
+
+    @Test
     void 提问到采纳的完整链路会异步结算声誉并更新搜索与通知() throws Exception {
         register("2026001", "测试小明", "it-ming@campus.edu.cn");
         long hongId = register("2026002", "测试小红", "it-hong@campus.edu.cn");
@@ -224,6 +298,35 @@ class CampusOverflowFlowIT {
         mvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"2026001\",\"password\":\"Campus2026\"}"))
                 .andExpect(status().isForbidden());
+    }
+
+    private void runMigration(Connection connection, String classpath) throws Exception {
+        var resource = new org.springframework.core.io.ClassPathResource(classpath);
+        String sql;
+        try (var input = resource.getInputStream()) {
+            sql = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        }
+        try (Statement statement = connection.createStatement()) {
+            for (String command : sql.split(";")) {
+                if (!command.isBlank()) {
+                    statement.execute(command);
+                }
+            }
+        }
+    }
+
+    private int queryInt(Connection connection, String sql) throws SQLException {
+        try (Statement statement = connection.createStatement(); ResultSet result = statement.executeQuery(sql)) {
+            assertThat(result.next()).isTrue();
+            return result.getInt(1);
+        }
+    }
+
+    private String queryString(Connection connection, String sql) throws SQLException {
+        try (Statement statement = connection.createStatement(); ResultSet result = statement.executeQuery(sql)) {
+            assertThat(result.next()).isTrue();
+            return result.getString(1);
+        }
     }
 
     private long register(String username, String displayName, String email) throws Exception {
