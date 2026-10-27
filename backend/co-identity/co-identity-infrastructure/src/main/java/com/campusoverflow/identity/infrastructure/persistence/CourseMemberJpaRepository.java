@@ -7,7 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface CourseMemberJpaRepository extends JpaRepository<CourseMemberJpaEntity, Long> {
     Optional<CourseMemberJpaEntity> findByCourseIdAndUserId(long courseId, long userId);
 
-    List<CourseMemberJpaEntity> findByCourseId(long courseId);
+    List<CourseMemberJpaEntity> findByCourseIdAndStatus(long courseId, String status);
 
-    List<CourseMemberJpaEntity> findByUserId(long userId);
+    List<CourseMemberJpaEntity> findByUserIdAndStatus(long userId, String status);
 }

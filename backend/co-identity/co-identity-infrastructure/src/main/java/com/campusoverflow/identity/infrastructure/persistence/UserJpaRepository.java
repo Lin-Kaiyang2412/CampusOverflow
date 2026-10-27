@@ -10,6 +10,8 @@ public interface UserJpaRepository extends JpaRepository<UserJpaEntity, Long> {
 
     Optional<UserJpaEntity> findByDisplayName(String displayName);
 
+    Optional<UserJpaEntity> findByEmailHash(String emailHash);
+
     boolean existsByUsername(String username);
 
     boolean existsByDisplayName(String displayName);

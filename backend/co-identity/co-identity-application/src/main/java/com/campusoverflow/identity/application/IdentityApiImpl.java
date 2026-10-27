@@ -67,7 +67,8 @@ public class IdentityApiImpl implements IdentityApi {
         if (courseId == null) {
             return role == Role.TEACHER;
         }
-        return courses.findMember(courseId, userId).map(m -> m.role().canManage()).orElse(false);
+        return courses.findMember(courseId, userId)
+                .map(m -> m.isApproved() && m.role().canManage()).orElse(false);
     }
 
     private static UserSummary toSummary(User u) {

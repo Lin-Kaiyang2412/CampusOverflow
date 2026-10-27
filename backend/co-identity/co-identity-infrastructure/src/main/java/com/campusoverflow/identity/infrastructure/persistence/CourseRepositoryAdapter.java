@@ -56,20 +56,29 @@ public class CourseRepositoryAdapter implements CourseRepository {
     public CourseMember saveMember(CourseMember member) {
         CourseMemberJpaEntity e = members.findByCourseIdAndUserId(member.courseId(), member.userId())
                 .orElseGet(() -> new CourseMemberJpaEntity(member.courseId(), member.userId(), member.role().name(),
-                        member.joinedAt()));
+                        member.status().name(), member.joinedAt()));
         e.setRole(member.role().name());
+        e.setStatus(member.status().name());
         members.save(e);
         return member;
     }
 
     @Override
     public List<CourseMember> findMembers(long courseId) {
-        return members.findByCourseId(courseId).stream().map(CourseRepositoryAdapter::toDomain).toList();
+        return members.findByCourseIdAndStatus(courseId, "APPROVED").stream()
+                .map(CourseRepositoryAdapter::toDomain).toList();
+    }
+
+    @Override
+    public List<CourseMember> findPendingMembers(long courseId) {
+        return members.findByCourseIdAndStatus(courseId, "PENDING").stream()
+                .map(CourseRepositoryAdapter::toDomain).toList();
     }
 
     @Override
     public List<CourseMember> findMembershipsOfUser(long userId) {
-        return members.findByUserId(userId).stream().map(CourseRepositoryAdapter::toDomain).toList();
+        return members.findByUserIdAndStatus(userId, "APPROVED").stream()
+                .map(CourseRepositoryAdapter::toDomain).toList();
     }
 
     private static Course toDomain(CourseJpaEntity e) {
@@ -78,6 +87,6 @@ public class CourseRepositoryAdapter implements CourseRepository {
 
     private static CourseMember toDomain(CourseMemberJpaEntity e) {
         return CourseMember.reconstitute(e.getCourseId(), e.getUserId(), CourseRole.valueOf(e.getRole()),
-                e.getJoinedAt());
+                com.campusoverflow.identity.domain.CourseMemberStatus.valueOf(e.getStatus()), e.getJoinedAt());
     }
 }

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.campusoverflow.shared.domain.BusinessRuleException;
+import com.campusoverflow.shared.domain.ConflictException;
 import com.campusoverflow.shared.domain.ForbiddenException;
 import com.campusoverflow.shared.security.Actor;
 import com.campusoverflow.shared.security.Role;
@@ -34,5 +35,31 @@ class CourseTest {
         CourseMember s = CourseMember.student(1, 6, NOW);
         s.changeRole(CourseRole.TA);
         assertThat(s.role().canManage()).isTrue();
+    }
+
+    @Test
+    void applicationRequiresApprovalBeforeBecomingMember() {
+        CourseMember application = CourseMember.applicant(1, 2, NOW);
+        assertThat(application.status()).isEqualTo(CourseMemberStatus.PENDING);
+        assertThat(application.isApproved()).isFalse();
+        assertThatThrownBy(() -> application.changeRole(CourseRole.TA))
+                .isInstanceOf(BusinessRuleException.class);
+
+        application.approve();
+
+        assertThat(application.status()).isEqualTo(CourseMemberStatus.APPROVED);
+        assertThat(application.isApproved()).isTrue();
+        assertThatThrownBy(application::approve).isInstanceOf(ConflictException.class);
+    }
+
+    @Test
+    void rejectedApplicationCanBeSubmittedAgain() {
+        CourseMember application = CourseMember.applicant(1, 2, NOW);
+
+        application.reject();
+        assertThat(application.status()).isEqualTo(CourseMemberStatus.REJECTED);
+        application.reapply();
+
+        assertThat(application.status()).isEqualTo(CourseMemberStatus.PENDING);
     }
 }

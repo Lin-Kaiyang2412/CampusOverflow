@@ -56,10 +56,26 @@ public class CourseController {
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("id", id));
     }
 
-    @Operation(summary = "加入课程")
+    @Operation(summary = "申请加入课程（需教师或助教审核）")
     @PostMapping("/{courseId}/join")
     public ResponseEntity<Void> join(@Parameter(hidden = true) Actor actor, @PathVariable long courseId) {
-        courses.join(actor, courseId);
+        courses.apply(actor, courseId);
+        return ResponseEntity.status(HttpStatus.ACCEPTED).body(null);
+    }
+
+    @Operation(summary = "待审核选课申请（教师/助教/管理员）")
+    @GetMapping("/{courseId}/applications")
+    public List<CourseMemberView> pendingApplications(@Parameter(hidden = true) Actor actor,
+                                                       @PathVariable long courseId) {
+        return courses.pendingApplications(actor, courseId);
+    }
+
+    @Operation(summary = "审核选课申请（教师/助教/管理员）")
+    @PutMapping("/{courseId}/applications/{userId}")
+    public ResponseEntity<Void> reviewApplication(@Parameter(hidden = true) Actor actor, @PathVariable long courseId,
+                                                   @PathVariable long userId,
+                                                   @Valid @RequestBody ReviewApplicationRequest req) {
+        courses.reviewApplication(actor, courseId, userId, req.approve());
         return ResponseEntity.noContent().build();
     }
 
@@ -81,5 +97,8 @@ public class CourseController {
     }
 
     public record AssignRoleRequest(@NotNull CourseRole role) {
+    }
+
+    public record ReviewApplicationRequest(@NotNull Boolean approve) {
     }
 }

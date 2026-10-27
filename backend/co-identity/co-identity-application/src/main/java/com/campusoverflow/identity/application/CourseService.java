@@ -4,6 +4,7 @@ import com.campusoverflow.identity.domain.Course;
 import com.campusoverflow.identity.domain.CourseMember;
 import com.campusoverflow.identity.domain.CourseRepository;
 import com.campusoverflow.identity.domain.CourseRole;
+import com.campusoverflow.identity.domain.CourseMemberStatus;
 import com.campusoverflow.identity.domain.User;
 import com.campusoverflow.identity.domain.UserRepository;
 import com.campusoverflow.shared.domain.ConflictException;
@@ -43,6 +44,7 @@ public class CourseService {
         return saved.id();
     }
 
+    /** 内部直接加入课程，供演示数据等受信任流程使用。 */
     @Transactional
     public void join(Actor actor, long courseId) {
         loadCourse(courseId);
@@ -50,6 +52,59 @@ public class CourseService {
             throw new ConflictException("ID-2005", "你已加入该课程");
         }
         courses.saveMember(CourseMember.student(courseId, actor.userId(), clock.instant()));
+    }
+
+    /** 学生提交选课申请，教师或课程助教审核后才成为正式成员。 */
+    @Transactional
+    public void apply(Actor actor, long courseId) {
+        loadCourse(courseId);
+        CourseMember application = courses.findMember(courseId, actor.userId())
+                .map(existing -> {
+                    if (existing.status() == CourseMemberStatus.REJECTED) {
+                        existing.reapply();
+                        return existing;
+                    }
+                    String message = existing.isApproved() ? "你已加入该课程" : "你的选课申请正在等待审核";
+                    throw new ConflictException("ID-2005", message);
+                })
+                .orElseGet(() -> CourseMember.applicant(courseId, actor.userId(), clock.instant()));
+        courses.saveMember(application);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CourseMemberView> pendingApplications(Actor actor, long courseId) {
+        Course course = loadCourse(courseId);
+        requireCourseManager(actor, course);
+        List<CourseMember> pending = courses.findPendingMembers(courseId);
+        Map<Long, User> byId = users.findAllById(pending.stream().map(CourseMember::userId).toList()).stream()
+                .collect(Collectors.toMap(User::id, Function.identity()));
+        return pending.stream()
+                .map(m -> new CourseMemberView(m.userId(),
+                        byId.containsKey(m.userId()) ? byId.get(m.userId()).displayName() : "未知用户", m.role()))
+                .toList();
+    }
+
+    @Transactional
+    public void reviewApplication(Actor actor, long courseId, long userId, boolean approve) {
+        Course course = loadCourse(courseId);
+        requireCourseManager(actor, course);
+        CourseMember application = courses.findMember(courseId, userId)
+                .orElseThrow(() -> new NotFoundException("ID-4004", "选课申请不存在"));
+        if (approve) {
+            application.approve();
+        } else {
+            application.reject();
+        }
+        courses.saveMember(application);
+    }
+
+    private void requireCourseManager(Actor actor, Course course) {
+        boolean manages = actor.isAdmin() || course.teacherId() == actor.userId()
+                || courses.findMember(course.id(), actor.userId())
+                .map(m -> m.isApproved() && m.role().canManage()).orElse(false);
+        if (!manages) {
+            throw new ForbiddenException("ID-3004", "只有课程教师、助教或管理员可以审核选课申请");
+        }
     }
 
     /** 课程教师或管理员调整成员角色（例如任命助教）。 */

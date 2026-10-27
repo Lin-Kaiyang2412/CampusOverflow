@@ -25,16 +25,20 @@ public class CourseMemberJpaEntity {
     @Column(nullable = false, length = 16)
     private String role;
 
+    @Column(nullable = false, length = 16)
+    private String status;
+
     @Column(name = "joined_at", nullable = false)
     private Instant joinedAt;
 
     protected CourseMemberJpaEntity() {
     }
 
-    public CourseMemberJpaEntity(long courseId, long userId, String role, Instant joinedAt) {
+    public CourseMemberJpaEntity(long courseId, long userId, String role, String status, Instant joinedAt) {
         this.courseId = courseId;
         this.userId = userId;
         this.role = role;
+        this.status = status;
         this.joinedAt = joinedAt;
     }
 
@@ -43,5 +47,7 @@ public class CourseMemberJpaEntity {
     public long getUserId() { return userId; }
     public String getRole() { return role; }
     public void setRole(String role) { this.role = role; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
     public Instant getJoinedAt() { return joinedAt; }
 }
