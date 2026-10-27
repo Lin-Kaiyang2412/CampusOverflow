@@ -154,7 +154,9 @@ public class ReputationPersistenceAdapter
         e.setWinnerId(b.winnerId());
         e.setAnswerId(b.answerId());
         e.setClosedAt(b.closedAt());
-        BountyJpaEntity saved = bounties.save(e);
+        // saveAndFlush 让唯一约束冲突（如 uk_bounty_question_open）在事务内当场暴露，
+        // 供应用层翻译为业务冲突码并回滚，而不是留到提交时变成 500。
+        BountyJpaEntity saved = bounties.saveAndFlush(e);
         if (b.id() == null) {
             b.assignId(saved.getId());
         }
