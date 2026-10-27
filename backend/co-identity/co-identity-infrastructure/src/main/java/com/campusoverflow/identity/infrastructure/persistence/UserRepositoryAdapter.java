@@ -41,6 +41,11 @@ public class UserRepositoryAdapter implements UserRepository {
     }
 
     @Override
+    public Optional<User> findByEmail(String email) {
+        return jpa.findByEmailHash(encryptor.digest(email)).map(this::toDomain);
+    }
+
+    @Override
     public boolean existsByUsername(String username) {
         return jpa.existsByUsername(username);
     }

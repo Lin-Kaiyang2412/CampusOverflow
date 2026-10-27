@@ -18,5 +18,7 @@ public interface CourseRepository {
 
     List<CourseMember> findMembers(long courseId);
 
+    List<CourseMember> findPendingMembers(long courseId);
+
     List<CourseMember> findMembershipsOfUser(long userId);
 }

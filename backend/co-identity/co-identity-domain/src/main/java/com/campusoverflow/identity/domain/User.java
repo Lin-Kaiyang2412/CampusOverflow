@@ -25,14 +25,14 @@ public class User {
 
     private Long id;
     private final String username;
-    private final String displayName;
-    private final String email;
+    private String displayName;
+    private String email;
     private final String passwordHash;
     private Role role;
     private UserStatus status;
     private boolean verified;
-    private final String college;
-    private final String className;
+    private String college;
+    private String className;
     private final Instant createdAt;
     private final long version;
 
@@ -78,6 +78,14 @@ public class User {
                                     String className, Instant createdAt, long version) {
         return new User(id, username, displayName, email, passwordHash, role, status, verified, college,
                 className, createdAt, version);
+    }
+
+    /** 本人修改资料；登录学号、角色和认证状态不可通过该用例变更。 */
+    public void updateProfile(String displayName, String email, String college, String className) {
+        this.displayName = checkDisplayName(displayName);
+        this.email = checkEmail(email);
+        this.college = optional(college, 50);
+        this.className = optional(className, 50);
     }
 
     /** 管理员完成校园身份认证。 */

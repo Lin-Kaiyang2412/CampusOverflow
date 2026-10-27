@@ -68,6 +68,22 @@ class UserTest {
     }
 
     @Test
+    void studentCanUpdateOwnEditableProfileFields() {
+        User u = newStudent();
+        String username = u.username();
+
+        u.updateProfile("新昵称", "New@Campus.edu", " 新学院 ", null);
+
+        assertThat(u.displayName()).isEqualTo("新昵称");
+        assertThat(u.email()).isEqualTo("new@campus.edu");
+        assertThat(u.college()).isEqualTo("新学院");
+        assertThat(u.className()).isNull();
+        assertThat(u.username()).isEqualTo(username);
+        assertThatThrownBy(() -> u.updateProfile("含 空格", "a@b.cn", null, null))
+                .isInstanceOf(BusinessRuleException.class);
+    }
+
+    @Test
     void passwordPolicyRequiresLettersAndDigits() {
         assertThatThrownBy(() -> PasswordPolicy.validate("short1")).isInstanceOf(BusinessRuleException.class);
         assertThatThrownBy(() -> PasswordPolicy.validate("onlyletters")).isInstanceOf(BusinessRuleException.class);
