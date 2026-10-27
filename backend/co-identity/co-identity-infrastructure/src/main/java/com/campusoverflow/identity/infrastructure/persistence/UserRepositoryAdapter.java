@@ -90,12 +90,13 @@ public class UserRepositoryAdapter implements UserRepository {
         e.setVerified(user.verified());
         e.setCollege(user.college());
         e.setClassName(user.className());
-        // saveAndFlush 让唯一约束冲突当场暴露，以便按约束名翻译为业务错误码（并发兜底，见 ensureUnique 先查后写的窗口）。
+        // saveAndFlush 让唯一约束冲突在事务内暴露，以便按约束名翻译为业务错误码；
+        // 这是 ensureUnique 先查后写的并发兜底，勿在循环保存的批量路径复用。
         UserJpaEntity saved;
         try {
             saved = jpa.saveAndFlush(e);
         } catch (DataIntegrityViolationException ex) {
-            String chain = exceptionChainMessages(ex);
+            String chain = com.campusoverflow.shared.util.ConstraintViolations.messagesOf(ex);
             if (chain.contains("uk_user_display_name")) {
                 throw new ConflictException("ID-2002", "该昵称已被使用");
             }
@@ -109,17 +110,6 @@ public class UserRepositoryAdapter implements UserRepository {
             user.assignId(saved.getId());
         }
         return user;
-    }
-
-    /** 收集异常链上所有 message，用约束名匹配（驱动与方言不同，message 是稳定交集）。 */
-    private static String exceptionChainMessages(Throwable ex) {
-        StringBuilder sb = new StringBuilder();
-        for (Throwable t = ex; t != null && sb.length() < 4096; t = t.getCause()) {
-            if (t.getMessage() != null) {
-                sb.append(t.getMessage()).append('\n');
-            }
-        }
-        return sb.toString();
     }
 
     private User toDomain(UserJpaEntity e) {

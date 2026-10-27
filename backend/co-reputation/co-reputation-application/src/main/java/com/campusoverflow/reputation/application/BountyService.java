@@ -74,7 +74,7 @@ public class BountyService {
         try {
             saved = bounties.save(bounty);
         } catch (DataIntegrityViolationException ex) {
-            if (exceptionChainMessages(ex).contains("uk_bounty_question_open")) {
+            if (com.campusoverflow.shared.util.ConstraintViolations.messagesOf(ex).contains("uk_bounty_question_open")) {
                 throw new ConflictException("REP-2001", "该问题已有进行中的悬赏");
             }
             throw ex;
@@ -145,14 +145,4 @@ public class BountyService {
                 bounty.sponsorId(), bounty.points()));
     }
 
-    /** 收集异常链上所有 message，按约束名匹配（驱动与方言不同，message 是稳定交集）。 */
-    private static String exceptionChainMessages(Throwable ex) {
-        StringBuilder sb = new StringBuilder();
-        for (Throwable t = ex; t != null && sb.length() < 4096; t = t.getCause()) {
-            if (t.getMessage() != null) {
-                sb.append(t.getMessage()).append('\n');
-            }
-        }
-        return sb.toString();
-    }
 }

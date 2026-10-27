@@ -2,6 +2,7 @@ package com.campusoverflow;
 
 import static org.awaitility.Awaitility.await;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -13,6 +14,8 @@ import com.campusoverflow.identity.application.AdminUserService;
 import com.campusoverflow.identity.application.CourseService;
 import com.campusoverflow.identity.application.CreateCourseCommand;
 import com.campusoverflow.identity.application.CreateStaffCommand;
+import com.campusoverflow.identity.domain.User;
+import com.campusoverflow.identity.domain.UserRepository;
 import com.campusoverflow.qa.application.command.PostQuestionCommand;
 import com.campusoverflow.qa.application.command.QuestionCommandService;
 import com.campusoverflow.shared.security.Actor;
@@ -92,6 +95,23 @@ class CampusOverflowFlowIT {
 
     @Autowired
     JdbcTemplate jdbc;
+
+    @Autowired
+    UserRepository users;
+
+    @Test
+    void 真实数据库昵称唯一约束会翻译为业务冲突码() {
+        users.save(User.register("20269001", "唯一昵称约束", "unique-name-1@campus.edu.cn",
+                "hash", "计算机工程学院", "计科2301", java.time.Instant.now()));
+        User duplicate = User.register("20269002", "唯一昵称约束", "unique-name-2@campus.edu.cn",
+                "hash", "计算机工程学院", "计科2301", java.time.Instant.now());
+
+        // 直接调用仓储，绕过应用层昵称预检查，确保真实命中 uk_user_display_name。
+        assertThatThrownBy(() -> users.save(duplicate))
+                .isInstanceOf(com.campusoverflow.shared.domain.ConflictException.class)
+                .satisfies(ex -> assertThat(((com.campusoverflow.shared.domain.ConflictException) ex).code())
+                        .isEqualTo("ID-2002"));
+    }
 
     /**
      * PR #37 评审要求：真实 MySQL 上验证「同一问题并发发布悬赏只有一个成功、失败请求不扣积分」。
