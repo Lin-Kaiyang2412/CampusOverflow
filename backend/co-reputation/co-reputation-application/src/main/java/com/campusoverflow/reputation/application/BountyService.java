@@ -56,7 +56,7 @@ public class BountyService {
     @Transactional
     public long open(Actor actor, long questionId, int points, int days) {
         if (bounties.findOpenByQuestion(questionId).isPresent()) {
-            throw new ConflictException("BOUNTY_ALREADY_OPEN", "该问题已有进行中的悬赏");
+            throw new ConflictException("REP-2001", "该问题已有进行中的悬赏");
         }
         QuestionRef question = qa.findQuestion(questionId)
                 .orElseThrow(() -> new NotFoundException("QA-4001", "问题不存在，id=" + questionId));
@@ -75,7 +75,7 @@ public class BountyService {
             saved = bounties.save(bounty);
         } catch (DataIntegrityViolationException ex) {
             if (exceptionChainMessages(ex).contains("uk_bounty_question_open")) {
-                throw new ConflictException("BOUNTY_ALREADY_OPEN", "该问题已有进行中的悬赏");
+                throw new ConflictException("REP-2001", "该问题已有进行中的悬赏");
             }
             throw ex;
         }

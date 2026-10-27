@@ -3,6 +3,7 @@ package com.campusoverflow.reputation.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -57,7 +58,7 @@ class BountyServiceTest {
     }
 
     @Test
-    void duplicateOpenViaUniqueViolationBecomesConflictAndKeepsPoints() {
+    void duplicateOpenViaUniqueViolationBecomesConflict() {
         // 模拟并发窗口：先查后写都通过，第二个请求在写入时被唯一键 uk_bounty_question_open 拒绝。
         when(bounties.save(any(Bounty.class)))
                 .thenThrow(new DataIntegrityViolationException(
@@ -92,8 +93,8 @@ class BountyServiceTest {
                 .satisfies(ex -> assertThat(((ConflictException) ex).getMessage())
                         .isEqualTo("该问题已有进行中的悬赏"));
 
-        // 预检查命中时不应触碰账户与事件。
-        verify(accounts, never()).findByUserId(any(Long.class));
+        // 预检查命中时不应触碰账户与事件（基本类型参数用 anyLong 匹配，避免装箱匹配器空转）。
+        verify(accounts, never()).findByUserId(anyLong());
         verify(events, never()).publish(any());
     }
 }

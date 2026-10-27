@@ -1,6 +1,7 @@
 package com.campusoverflow;
 
 import static org.awaitility.Awaitility.await;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -8,15 +9,31 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.campusoverflow.identity.application.AdminUserService;
+import com.campusoverflow.identity.application.CourseService;
+import com.campusoverflow.identity.application.CreateCourseCommand;
+import com.campusoverflow.identity.application.CreateStaffCommand;
+import com.campusoverflow.qa.application.command.PostQuestionCommand;
+import com.campusoverflow.qa.application.command.QuestionCommandService;
+import com.campusoverflow.shared.security.Actor;
+import com.campusoverflow.shared.security.Role;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
@@ -57,6 +74,78 @@ class CampusOverflowFlowIT {
 
     @Autowired
     ObjectMapper json;
+
+    @Autowired
+    AdminUserService admins;
+
+    @Autowired
+    CourseService courses;
+
+    @Autowired
+    QuestionCommandService questions;
+
+    @Autowired
+    JdbcTemplate jdbc;
+
+    /**
+     * PR #37 评审要求：真实 MySQL 上验证「同一问题并发发布悬赏只有一个成功、失败请求不扣积分」。
+     * 两个线程同时 POST 同一问题的悬赏；无论请求是否真正交错，最终都必须满足：
+     * 一个 201 一个 409、数据库只有一条 OPEN 悬赏、积分只冻结一次。
+     */
+    @Test
+    void 同一问题并发发布悬赏只有一个成功且失败请求不扣积分() throws Exception {
+        // 用虚拟管理员引导教师账号（与 DemoDataSeeder 相同的引导方式，仅用于测试造数）
+        Actor system = new Actor(0L, "system", Role.ADMIN);
+        long teacherId = admins.createStaff(system, new CreateStaffCommand(
+                "T9001", "并发王老师", "it-bounty-teacher@campus.edu.cn", "Campus2026", Role.TEACHER, "计算机工程学院"));
+        Actor teacher = new Actor(teacherId, "并发王老师", Role.TEACHER);
+        MockHttpSession teacherSession = login("T9001");
+        long courseId = courses.create(teacher, new CreateCourseCommand("CS9001", "并发悬赏课", "2026-秋"));
+        long questionId = questions.post(teacher, new PostQuestionCommand(courseId,
+                "同一问题能否被并发发起两次悬赏？",
+                "两个请求同时发布同一问题的悬赏，系统必须只创建一条进行中的悬赏，且失败方不得扣减任何积分。",
+                List.of("并发")));
+
+        // 教师声誉账户由 UserRegisteredEvent 异步创建，等初始积分到账再发悬赏
+        await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
+                mvc.perform(get("/api/v1/users/" + teacherId + "/reputation").session(teacherSession))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.availablePoints").value(1000)));
+
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            CountDownLatch ready = new CountDownLatch(2);
+            CountDownLatch fire = new CountDownLatch(1);
+            Callable<Integer> openBounty = () -> {
+                ready.countDown();
+                fire.await(10, TimeUnit.SECONDS);
+                return mvc.perform(post("/api/v1/questions/" + questionId + "/bounty")
+                                .session(teacherSession).with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"points\":50,\"days\":7}"))
+                        .andReturn().getResponse().getStatus();
+            };
+            Future<Integer> first = pool.submit(openBounty);
+            Future<Integer> second = pool.submit(openBounty);
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            fire.countDown();
+
+            assertThat(List.of(first.get(60, TimeUnit.SECONDS), second.get(60, TimeUnit.SECONDS)))
+                    .containsExactlyInAnyOrder(201, 409);
+        } finally {
+            pool.shutdownNow();
+        }
+
+        // 数据库层面只有一条 OPEN 悬赏；失败请求的冻结已回滚，积分只扣了一次 50。
+        Integer openCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM rep_bounty WHERE question_id = ? AND status = 'OPEN'",
+                Integer.class, questionId);
+        assertThat(openCount).isEqualTo(1);
+        mvc.perform(get("/api/v1/users/" + teacherId + "/reputation").session(teacherSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.availablePoints").value(950))
+                .andExpect(jsonPath("$.frozenPoints").value(50));
+    }
 
     @Test
     void 提问到采纳的完整链路会异步结算声誉并更新搜索与通知() throws Exception {
