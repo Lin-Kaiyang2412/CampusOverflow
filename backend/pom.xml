@@ -37,8 +37,11 @@
         <jacoco.version>0.8.12</jacoco.version>
         <!-- 修复新版 Docker Engine 与 Testcontainers 默认 Docker API 版本不兼容 -->
         <testcontainers.version>1.21.4</testcontainers.version>
-        <!-- 领域层行覆盖率门禁（适应度函数 FF-4）。学生版初始为 0，Sprint 4 前应提升到 0.80 -->
-        <domain.coverage.minimum>0</domain.coverage.minimum>
+        <!-- 领域层行覆盖率门禁（适应度函数 FF-4）：只统计 com/campusoverflow/{ctx}/domain/**，
+             应用层/基础设施/启动装配类不计入。低于阈值时 verify 直接失败。
+             当前实测基线：qa 82.9% / discovery 78.9% / identity 75.7% / reputation 74%+，
+             先卡 0.70 防止回退；Sprint 4 末目标 0.80，核心聚合（co-qa-domain）单独提到 0.90。 -->
+        <domain.coverage.minimum>0.70</domain.coverage.minimum>
     </properties>
 
     <dependencyManagement>

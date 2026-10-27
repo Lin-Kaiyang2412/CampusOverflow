@@ -11,6 +11,11 @@
     <artifactId>co-qa-domain</artifactId>
     <packaging>jar</packaging>
     <name>Q&amp;A 问答核心 :: domain（纯 Java）</name>
+    <properties>
+        <!-- 核心聚合：Lab 7 硬指标 90%。补齐 QaDomainContractTest 后实测行覆盖 100%、
+             分支覆盖 90.2%，门禁直接卡在 Lab 7 要求的 0.90，防止后续回退到 90% 以下。 -->
+        <domain.coverage.minimum>0.90</domain.coverage.minimum>
+    </properties>
     <dependencies>
         <dependency>
             <groupId>com.campusoverflow</groupId>
