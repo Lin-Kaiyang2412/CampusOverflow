@@ -44,17 +44,81 @@ public class QuestionQueryService {
     }
 
     public PageResult<QuestionSummaryView> list(Long courseId, PageRequest page) {
-        // TODO(S2)：实现 QuestionQueryService.list——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：QuestionQueryService.list 尚未实现");
+        var cached = cache.get(courseId, page);
+        if (cached.isPresent()) {
+            return cached.get();
+        }
+
+        PageResult<QuestionRow> rows = readModel.listQuestions(courseId, page);
+        Map<Long, UserSummary> users = identity.findUsers(rows.items().stream().map(QuestionRow::authorId).toList());
+        PageResult<QuestionSummaryView> result = rows.map(row -> new QuestionSummaryView(row.id(), row.title(),
+                renderer.toPlainText(row.body(), EXCERPT_LENGTH), row.tags(), row.courseId(),
+                AuthorView.of(row.authorId(), users.get(row.authorId())), row.score(), row.answerCount(),
+                row.viewCount(), row.acceptedAnswerId() != null, row.createdAt()));
+        cache.put(courseId, page, result);
+        return result;
     }
 
     public QuestionDetailView detail(long questionId, Actor actorOrNull) {
-        // TODO(S2)：实现 QuestionQueryService.detail——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：QuestionQueryService.detail 尚未实现");
+        QuestionRow question = readModel.findQuestion(questionId)
+                .orElseThrow(() -> new NotFoundException("QA-4001", "问题不存在，id=" + questionId));
+        List<AnswerRow> answerRows = readModel.findAnswers(questionId);
+        List<CommentRow> commentRows = readModel.findComments(questionId);
+
+        Set<Long> userIds = new HashSet<>();
+        userIds.add(question.authorId());
+        answerRows.forEach(answer -> {
+            userIds.add(answer.authorId());
+            if (answer.endorsedBy() != null) {
+                userIds.add(answer.endorsedBy());
+            }
+        });
+        commentRows.forEach(comment -> userIds.add(comment.authorId()));
+        Map<Long, UserSummary> users = identity.findUsers(userIds);
+
+        Map<String, Integer> myVotes = actorOrNull == null ? Map.of() : readModel.findMyVotes(actorOrNull.userId(),
+                questionId, answerRows.stream().map(AnswerRow::id).toList());
+        boolean canManage = actorOrNull != null && identity.canManageCourse(actorOrNull.userId(), question.courseId());
+        boolean ownsQuestion = actorOrNull != null && actorOrNull.is(question.authorId());
+        PermissionsView permissions = actorOrNull == null ? PermissionsView.NONE
+                : new PermissionsView(ownsQuestion || canManage, canManage || (ownsQuestion && question.answerCount() == 0),
+                (ownsQuestion || canManage) && question.acceptedAnswerId() == null, canManage);
+
+        Map<String, List<CommentView>> commentsByTarget = commentRows.stream()
+                .collect(Collectors.groupingBy(row -> row.targetType() + ":" + row.targetId(),
+                        Collectors.mapping(row -> toCommentView(row, users), Collectors.toList())));
+        List<AnswerView> answers = answerRows.stream()
+                .sorted(Comparator.comparing((AnswerRow row) -> !Objects.equals(row.id(), question.acceptedAnswerId()))
+                        .thenComparing(AnswerRow::score, Comparator.reverseOrder())
+                        .thenComparing(AnswerRow::createdAt))
+                .map(row -> {
+                    boolean canEdit = actorOrNull != null && (canManage || actorOrNull.is(row.authorId()));
+                    return new AnswerView(row.id(), row.body(), renderer.toSafeHtml(row.body()),
+                            AuthorView.of(row.authorId(), users.get(row.authorId())), row.score(),
+                            Objects.equals(row.id(), question.acceptedAnswerId()),
+                            row.endorsedBy() == null ? null : AuthorView.of(row.endorsedBy(), users.get(row.endorsedBy())),
+                            myVotes.getOrDefault("ANSWER:" + row.id(), 0), canEdit, row.createdAt(), row.updatedAt(),
+                            commentsByTarget.getOrDefault("ANSWER:" + row.id(), List.of()));
+                })
+                .toList();
+
+        CourseRefView course = question.courseId() == null ? null : identity.findCourse(question.courseId())
+                .map(value -> new CourseRefView(value.id(), value.code(), value.name())).orElse(null);
+        viewCounter.increment(questionId);
+        return new QuestionDetailView(question.id(), question.title(), question.body(),
+                renderer.toSafeHtml(question.body()), question.tags(), course,
+                AuthorView.of(question.authorId(), users.get(question.authorId())), question.score(),
+                question.answerCount(), question.viewCount(), question.acceptedAnswerId(),
+                myVotes.getOrDefault("QUESTION:" + question.id(), 0), question.createdAt(), question.updatedAt(),
+                permissions, commentsByTarget.getOrDefault("QUESTION:" + question.id(), List.of()), answers);
     }
 
     public List<TagView> popularTags(int limit) {
-        // TODO(S2)：实现 QuestionQueryService.popularTags——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S2)：QuestionQueryService.popularTags 尚未实现");
+        return readModel.popularTags(Math.max(0, limit));
+    }
+
+    private CommentView toCommentView(CommentRow row, Map<Long, UserSummary> users) {
+        return new CommentView(row.id(), AuthorView.of(row.authorId(), users.get(row.authorId())), row.parentId(),
+                row.body(), row.createdAt());
     }
 }

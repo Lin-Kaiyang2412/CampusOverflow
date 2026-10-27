@@ -3,23 +3,35 @@ package com.campusoverflow.discovery.domain.search;
 import java.util.Comparator;
 import java.util.List;
 
-/**
- * 相关问题推荐（规则引擎，非 AI）：按标签集合的 Jaccard 相似度排序，
- * J(A,B) = |A∩B| / |A∪B|；相似度相同则得分高、已采纳者优先。
- */
 public final class RelatedQuestionPolicy {
 
     private RelatedQuestionPolicy() {
     }
 
     public static double jaccard(int shared, int sizeA, int sizeB) {
-        // TODO(S3)：实现 RelatedQuestionPolicy.jaccard——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：RelatedQuestionPolicy.jaccard 尚未实现");
+        if (shared < 0 || sizeA < 0 || sizeB < 0 || shared > sizeA || shared > sizeB) {
+            throw new IllegalArgumentException("Invalid tag counts");
+        }
+        int union = sizeA + sizeB - shared;
+        return union == 0 ? 0.0 : (double) shared / union;
     }
 
     public static List<SearchIndex.RelatedCandidate> rank(List<SearchIndex.RelatedCandidate> candidates, int ownTagCount,
                                                           int limit) {
-        // TODO(S3)：实现 RelatedQuestionPolicy.rank——参考领域单元测试与 arc42 文档中的业务规则
-        throw new UnsupportedOperationException("TODO(S3)：RelatedQuestionPolicy.rank 尚未实现");
+        if (candidates == null || candidates.isEmpty() || limit <= 0) {
+            return List.of();
+        }
+        return candidates.stream()
+                .filter(candidate -> candidate != null && candidate.sharedTags() > 0)
+                .sorted(Comparator
+                        .comparingDouble((SearchIndex.RelatedCandidate c) ->
+                                jaccard(c.sharedTags(), ownTagCount, c.tagCount()))
+                        .reversed()
+                        .thenComparing(SearchIndex.RelatedCandidate::accepted, Comparator.reverseOrder())
+                        .thenComparing(Comparator.comparingInt(SearchIndex.RelatedCandidate::score).reversed())
+                        .thenComparing(Comparator.comparingInt(SearchIndex.RelatedCandidate::answerCount).reversed())
+                        .thenComparingLong(SearchIndex.RelatedCandidate::questionId))
+                .limit(limit)
+                .toList();
     }
 }

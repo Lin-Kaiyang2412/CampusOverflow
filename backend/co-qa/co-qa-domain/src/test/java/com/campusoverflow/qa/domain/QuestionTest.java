@@ -67,13 +67,19 @@ class QuestionTest {
         @Test
         void askerCanAcceptAnAnswerOnce() {
             Question q = persistedQuestion();
+
+            // 必须在问题被采纳前创建两个答案。
             Answer a = persistedAnswer(q, OTHER.userId(), 50);
+            Answer b = persistedAnswer(q, 3, 51);
+
             q.accept(a, ASKER, false);
+
             assertThat(q.acceptedAnswerId()).isEqualTo(50L);
             assertThat(q.isAccepted(50)).isTrue();
 
-            Answer b = persistedAnswer(q, 3, 51);
-            assertThatThrownBy(() -> q.accept(b, ASKER, false)).isInstanceOf(ConflictException.class);
+            // 已经采纳一个答案后，再采纳另一个答案应当失败。
+            assertThatThrownBy(() -> q.accept(b, ASKER, false))
+                    .isInstanceOf(ConflictException.class);
         }
 
         @Test
@@ -93,11 +99,10 @@ class QuestionTest {
         @Test
         void answerMustBelongToQuestion() {
             Question q = persistedQuestion();
-            Question another = persistedQuestion();
             Answer foreign = Answer.reconstitute(60L, 999L, 3, MarkdownBody.ofAnswer("这是别的问题下面的回答内容"), 0,
                     null, NOW, NOW, null, 0);
             assertThatThrownBy(() -> q.accept(foreign, ASKER, false)).isInstanceOf(BusinessRuleException.class);
-            assertThat(another.acceptedAnswerId()).isNull();
+            assertThat(q.acceptedAnswerId()).isNull();
         }
 
         @Test
