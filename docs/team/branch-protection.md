@@ -8,7 +8,8 @@
 
 | 观察 | 结论 | 证据 |
 | --- | --- | --- |
-| `main` 不接受未经评审的合并 | 保护已开启 | 全部开放 PR 的 `mergeable_state` 均为 `blocked`，即使已有 1 个 approve（#33 / #34 / #36 均如此） |
+| `main` 不接受未经评审的合并 | 保护已开启 | 只拿到 1 个 approve 的 PR 仍为 `blocked`（#33 / #34 / #36 均如此） |
+| **合并前需 2 个 approve** | 已开启 | #37 拿到第 2 个 approve（Borair + zgabcd1）后，`mergeable_state` 由 `blocked` 变 `clean`；同一时刻 #36 只有 1 个 approve，仍是 `blocked` |
 | 合并前必须有人评审 | 保护已开启 | 已合并的 11 个 PR（#16 #18 #19 #22 #24 #26 #27 #28 #30 #31 #32）**每一个都含组长的 APPROVED** |
 | 直接推送到 `main` | 未见发生 | `main` 上每次 push 事件均可对应一次 PR 合并，无来源不明的直推 |
 | 成员权限 | 只有组长是 admin | 5 名协作者中 `Lin-Kaiyang2412` 为 `admin`，其余 4 人为 `write` |
@@ -24,7 +25,7 @@
 | --- | --- | --- |
 | `main` 禁止直接 push | ✅ 开启（含管理员） | 杜绝绕过评审 |
 | 变更必须经 Pull Request | ✅ 开启 | 所有代码进 main 前可评审 |
-| 合并前需审批数 | **1** | 至少 1 名队友带理由的 LGTM |
+| 合并前需审批数 | **2** | 1 个 approve 不足以解锁（#33/#34/#36 实测）；拿到第 2 个才变 `clean`（#37 实测） |
 | Dismiss stale approvals | ✅ 开启 | 改完代码旧 LGTM 自动作废 |
 | Require review from Code Owners | ⚠️ **待定** | 仓库尚未配置 `.github/CODEOWNERS`，勾了也是空转，见第 5 节 |
 | 合并前必须通过状态检查 | ✅ `Backend build and verification` + `Frontend build` | 见第 3 节的名称对照 |
@@ -56,7 +57,7 @@ GitHub 上勾选必需检查时，填的必须是 **workflow 里 job 的 `name`*
 
 `Settings → Branches → Add branch protection rule`，Branch name pattern 填 `main`，勾选：
 
-- ✅ Require a pull request before merging → Required approvals: `1`
+- ✅ Require a pull request before merging → Required approvals: `2`
 - ✅ Dismiss stale pull request approvals when new commits are pushed
 - ✅ Require status checks to pass → 选 `Backend build and verification`、`Frontend build`
 - ✅ Require branches to be up to date before merging
@@ -82,7 +83,7 @@ curl -X PUT \
     "required_pull_request_reviews": {
       "dismiss_stale_reviews": true,
       "require_code_owner_reviews": false,
-      "required_approving_review_count": 1
+      "required_approving_review_count": 2
     },
     "restrictions": null,
     "allow_force_pushes": false,
@@ -131,6 +132,7 @@ curl -X PUT \
 ## 7. 验收标准
 
 - [x] 未经评审的 PR 无法合并（`mergeable_state = blocked`）
-- [x] 已合并 PR 全部经过至少 1 次评审
+- [x] 只有 1 个 approve 时仍无法合并（#33 / #34 / #36 实测）
+- [x] 拿到 2 个 approve 后变 `clean` 可合并（#37 实测：Borair + zgabcd1）
 - [ ] `git push origin main` 被拒绝（`remote: error: GH006: Protected branch update failed`）—— 需组长实测并截图
 - [ ] `Settings → Branches` 规则页截图留存 —— 需组长提供，作为 Lab 1 提交物 1
