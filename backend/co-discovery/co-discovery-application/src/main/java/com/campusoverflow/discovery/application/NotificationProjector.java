@@ -7,7 +7,6 @@ import com.campusoverflow.discovery.domain.notification.NotificationType;
 import com.campusoverflow.identity.api.IdentityApi;
 import com.campusoverflow.identity.api.UserSummary;
 import com.campusoverflow.qa.api.QaQueryApi;
-import com.campusoverflow.qa.api.QuestionRef;
 import com.campusoverflow.qa.api.event.AnswerAcceptedEvent;
 import com.campusoverflow.qa.api.event.AnswerEndorsedEvent;
 import com.campusoverflow.qa.api.event.AnswerSubmittedEvent;

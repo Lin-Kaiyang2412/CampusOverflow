@@ -1,0 +1,120 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+        "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+        "https://checkstyle.org/dtds/configuration_1_3.dtd">
+<!--
+  CampusOverflow 后端 Checkstyle 规则集（适应度函数 FF-9）。
+
+  设计原则：**只卡真正会造成问题的规则，不卡风格偏好。**
+  规则集从零开始引入时如果一次报出几百条违规，只会被团队整体绕过（加 @SuppressWarnings
+  或直接把 severity 调成 info），门禁就名存实亡了。所以这里选的都是「低争议、高收益」的检查：
+  编译期能发现的不查（交给编译器）、纯审美的不查（交给评审），只查那些评审容易看漏、
+  但确实会埋雷的项。
+
+  维护约定：新增规则前先本地跑一遍 `mvn checkstyle:check`，确认违规数可控（个位数）
+  再提交；一次性引入大量违规的规则请单独开 PR 并附上整改清单。
+-->
+<module name="Checker">
+    <property name="charset" value="UTF-8"/>
+    <property name="severity" value="error"/>
+    <property name="fileExtensions" value="java"/>
+
+    <!-- 行长度：对齐主流 IDE 默认宽度，import/URL 不受限。
+         取 128 而不是常见的 120：现有代码有 2 处 122 字符的行，为 2 个字符去改别人的
+         实现代码不值得，等后续有人改到那些行时自然会收窄。 -->
+    <module name="LineLength">
+        <property name="max" value="128"/>
+        <property name="ignorePattern" value="^package .*|^import .*|href\s*=|http://|https://"/>
+    </module>
+
+    <module name="TreeWalker">
+
+        <!-- ============ import ============ -->
+        <!-- 未使用的 import：最容易被 IDE 自动导入后遗忘，长期积累会掩盖真实依赖 -->
+        <module name="UnusedImports">
+            <property name="processJavadoc" value="true"/>
+        </module>
+        <module name="RedundantImport"/>
+        <module name="AvoidStarImport">
+            <property name="allowStaticMemberImports" value="true"/>
+        </module>
+
+        <!-- ============ 代码块 ============ -->
+        <!-- 单行 if/for 不带花括号：后期插入语句时会静默改变语义 -->
+        <module name="NeedBraces"/>
+        <!-- 右花括号位置（LITERAL_TRY 等允许 } catch 同行）。
+             不启用 LeftCurly：项目大量使用紧凑单行 getter（`public long id() { return id; }`），
+             LeftCurly 会强制 `{` 后换行，与既有风格全面冲突。这类写法可读性没问题，
+             真正容易出事的是「if 不带花括号」，已由 NeedBraces 覆盖。 -->
+        <module name="RightCurly">
+            <property name="option" value="same"/>
+        </module>
+        <module name="EmptyStatement"/>
+        <module name="EmptyBlock">
+            <property name="option" value="text"/>
+        </module>
+
+        <!-- ============ 正确性 ============ -->
+        <!-- 重写 equals 却没重写 hashCode：放进 HashSet/HashMap 会行为异常 -->
+        <module name="EqualsHashCode"/>
+        <module name="MissingOverride"/>
+        <!-- long 字面量必须用大写 L，避免 1l 被误读为 11 -->
+        <module name="UpperEll"/>
+        <!-- 数组类型声明用 String[] args 而不是 String args[]（后者是 C 风格残留） -->
+        <module name="ArrayTypeStyle"/>
+        <!-- switch 缺 default 时容易漏分支 -->
+        <module name="MissingSwitchDefault"/>
+        <!-- 字符串比较必须用 equals，== 比较引用 -->
+        <module name="StringLiteralEquality"/>
+        <!-- 简化布尔返回：if (x) return true; else return false; -->
+        <module name="SimplifyBooleanExpression"/>
+        <module name="SimplifyBooleanReturn"/>
+        <!-- 空的 catch 块会吞掉异常，排查问题时最致命 -->
+        <module name="EmptyCatchBlock">
+            <property name="exceptionVariableName" value="expected|ignore"/>
+        </module>
+
+        <!-- ============ 命名 ============ -->
+        <module name="PackageName">
+            <property name="format" value="^[a-z]+(\.[a-z][a-z0-9]*)*$"/>
+        </module>
+        <module name="TypeName"/>
+        <module name="MethodName"/>
+        <module name="MemberName"/>
+        <module name="ParameterName"/>
+        <module name="LocalVariableName"/>
+        <!-- 常量要求全大写，但日志器惯例用小写 log（Spring / Lombok @Slf4j 生成的就是这个名字），
+             强行改成 LOGGER 会和 @Slf4j 生成的代码不一致，这里显式放行。 -->
+        <module name="ConstantName">
+            <property name="format" value="^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$|^log$|^logger$"/>
+        </module>
+        <module name="MethodTypeParameterName"/>
+        <module name="ClassTypeParameterName"/>
+
+        <!-- ============ 结构 ============ -->
+        <!-- 不启用 FinalClass：本项目聚合根/实体普遍采用「私有构造 + 静态工厂方法」，
+             这类类会被 FinalClass 判定为「应声明 final」而误报（Course / User / CourseMember 等）。
+             是否把聚合根声明为 final 属于设计决策，交给评审讨论，不放在静态检查里强制。 -->
+
+        <module name="ModifierOrder"/>
+        <!-- 不启用 HideUtilityClassConstructor：Spring Boot 启动类（@SpringBootApplication）
+             只有一个 static main，会被判定为「工具类应私有化构造」而误报
+             （CampusOverflowApplication）。为这一条误报再引入一整套 suppressions 文件不划算，
+             且真正的工具类私有化属于评审可发现的问题，不放在静态检查里硬卡。 -->
+        <!-- 接口字段默认就是 static final，不必重复声明 -->
+        <module name="InterfaceIsType"/>
+        <!-- 一个文件一个顶层类 -->
+        <module name="OuterTypeNumber"/>
+
+        <!-- ============ 空格（只保留最基础的两条）============ -->
+        <module name="WhitespaceAfter">
+            <property name="tokens" value="COMMA, SEMI, TYPECAST"/>
+        </module>
+        <module name="NoWhitespaceBefore">
+            <property name="tokens" value="COMMA, SEMI, POST_DEC, POST_INC"/>
+        </module>
+        <module name="GenericWhitespace"/>
+        <module name="MethodParamPad"/>
+        <module name="ParenPad"/>
+    </module>
+</module>
