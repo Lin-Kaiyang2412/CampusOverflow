@@ -4,7 +4,11 @@ on:
   push:
     branches: [main, develop, "sprint/**"]
   pull_request:
-    branches: [main, develop]
+    # 所有 base 分支都要跑。此前只写了 [main, develop]，导致以 feature 分支为 base
+    # 的 PR（堆叠 PR）完全不触发 CI：GitHub UI 上显示 mergeable_state=CLEAN，
+    # 看起来像"检查都过了"，实际上一个检查都没跑过。而堆叠 PR 恰恰是最需要验证的
+    # 一类——它们最终会跟着父 PR 一起进 main。改用 "**" 覆盖全部 base 分支。
+    branches: ["**"]
 
 permissions:
   contents: read
