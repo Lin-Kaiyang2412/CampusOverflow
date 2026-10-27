@@ -11,6 +11,10 @@
     <artifactId>co-qa-domain</artifactId>
     <packaging>jar</packaging>
     <name>Q&amp;A 问答核心 :: domain（纯 Java）</name>
+    <properties>
+        <!-- 核心聚合：Lab 7 要求核心聚合 90%，当前实测 82.9%，先卡 0.80 防回退 -->
+        <domain.coverage.minimum>0.80</domain.coverage.minimum>
+    </properties>
     <dependencies>
         <dependency>
             <groupId>com.campusoverflow</groupId>
