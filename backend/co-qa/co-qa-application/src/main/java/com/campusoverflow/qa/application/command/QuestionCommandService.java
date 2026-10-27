@@ -108,6 +108,6 @@ public class QuestionCommandService {
 
     private Question load(long questionId) {
         return questions.findById(questionId)
-                .orElseThrow(() -> new NotFoundException("QUESTION_NOT_FOUND", "问题不存在，id=" + questionId));
+                .orElseThrow(() -> new NotFoundException("QA-4001", "问题不存在，id=" + questionId));
     }
 }

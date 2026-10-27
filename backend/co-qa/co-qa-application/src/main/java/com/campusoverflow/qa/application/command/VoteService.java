@@ -66,18 +66,18 @@ public class VoteService {
             throw new BusinessRuleException("QA-1015", "投票值只能是 -1、0 或 1");
         }
 
-        Target target = resolve(type, targetId);
-
         Optional<Vote> existing =
                 votes.find(actor.userId(), type, targetId);
 
         int oldValue = existing.map(Vote::value).orElse(0);
 
-        // 重复提交相同投票时不重复更新分数，也不重复发布事件。
-        if (oldValue == value) {
+        // 已有投票被重复提交时直接返回，避免重复查询目标、更新分数或发布事件。
+        if (existing.isPresent() && oldValue == value) {
             return new VoteResult(oldValue, 0);
         }
 
+        // 首次投票和改投仍需验证目标存在、未删除，并取得内容作者。
+        Target target = resolve(type, targetId);
         Instant now = clock.instant();
 
         if (value == 0) {
@@ -132,7 +132,7 @@ public class VoteService {
             Question question = questions.findById(targetId)
                     .orElseThrow(() ->
                             new NotFoundException(
-                                    "QA-1004", "问题不存在，ID：" + targetId));
+                                    "QA-4001", "问题不存在，ID：" + targetId));
 
             if (question.isDeleted()) {
                 throw new BusinessRuleException("QA-1015", "不能给已删除的问题投票");
@@ -145,7 +145,7 @@ public class VoteService {
             Answer answer = answers.findById(targetId)
                     .orElseThrow(() ->
                             new NotFoundException(
-                                    "QA-1004", "回答不存在，ID：" + targetId));
+                                    "QA-4002", "回答不存在，ID：" + targetId));
 
             if (answer.isDeleted()) {
                 throw new BusinessRuleException("QA-1015", "不能给已删除的回答投票");
@@ -155,7 +155,7 @@ public class VoteService {
             Question question = questions.findById(answer.questionId())
                     .orElseThrow(() ->
                             new NotFoundException(
-                                    "QA-1004", "回答所属的问题不存在"));
+                                    "QA-4001", "回答所属的问题不存在"));
 
             if (question.isDeleted()) {
                 throw new BusinessRuleException("QA-1015", "不能给已删除问题下的回答投票");

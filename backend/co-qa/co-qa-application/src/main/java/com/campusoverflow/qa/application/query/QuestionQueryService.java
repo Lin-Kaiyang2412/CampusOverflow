@@ -61,7 +61,7 @@ public class QuestionQueryService {
 
     public QuestionDetailView detail(long questionId, Actor actorOrNull) {
         QuestionRow question = readModel.findQuestion(questionId)
-                .orElseThrow(() -> new NotFoundException("QUESTION_NOT_FOUND", "问题不存在，id=" + questionId));
+                .orElseThrow(() -> new NotFoundException("QA-4001", "问题不存在，id=" + questionId));
         List<AnswerRow> answerRows = readModel.findAnswers(questionId);
         List<CommentRow> commentRows = readModel.findComments(questionId);
 

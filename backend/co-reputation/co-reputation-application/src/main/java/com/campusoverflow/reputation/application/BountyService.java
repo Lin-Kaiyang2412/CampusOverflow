@@ -58,7 +58,7 @@ public class BountyService {
             throw new ConflictException("BOUNTY_ALREADY_OPEN", "该问题已有进行中的悬赏");
         }
         QuestionRef question = qa.findQuestion(questionId)
-                .orElseThrow(() -> new NotFoundException("QUESTION_NOT_FOUND", "问题不存在，id=" + questionId));
+                .orElseThrow(() -> new NotFoundException("QA-4001", "问题不存在，id=" + questionId));
         boolean managesCourse = identity.canManageCourse(actor.userId(), question.courseId());
         Instant now = clock.instant();
         Bounty bounty = Bounty.open(questionId, !question.deleted() && question.acceptedAnswerId() == null,

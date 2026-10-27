@@ -158,7 +158,7 @@ public class AnswerCommandService {
 
         if (answer.questionId() != questionId) {
             throw new NotFoundException(
-                    "ANSWER_NOT_FOUND",
+                    "QA-4002",
                     "该回答不属于指定问题"
             );
         }
@@ -228,7 +228,7 @@ public class AnswerCommandService {
     private Question loadQuestion(long id) {
         return questions.findById(id)
                 .orElseThrow(() -> new NotFoundException(
-                        "QUESTION_NOT_FOUND",
+                        "QA-4001",
                         "问题不存在，id=" + id
                 ));
     }
@@ -239,7 +239,7 @@ public class AnswerCommandService {
     private Answer loadAnswer(long id) {
         return answers.findById(id)
                 .orElseThrow(() -> new NotFoundException(
-                        "ANSWER_NOT_FOUND",
+                        "QA-4002",
                         "回答不存在，id=" + id
                 ));
     }

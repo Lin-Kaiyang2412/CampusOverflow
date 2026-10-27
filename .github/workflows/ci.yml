@@ -25,20 +25,6 @@ jobs:
           distribution: temurin
           cache: maven
 
-      - name: Diagnose Docker environment
-        run: |
-          echo "=== Docker-related environment variables ==="
-          env | sort | grep -E '^(DOCKER|TESTCONTAINERS)' || true
-
-          echo "=== Docker client and server versions ==="
-          docker version
-
-          echo "=== Docker context ==="
-          docker context ls
-
-          echo "=== Docker daemon information ==="
-          docker info
-
       - name: Compile backend
         run: mvn -B -f backend/pom.xml clean compile
 

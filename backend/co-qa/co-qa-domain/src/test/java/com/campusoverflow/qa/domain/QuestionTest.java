@@ -99,11 +99,10 @@ class QuestionTest {
         @Test
         void answerMustBelongToQuestion() {
             Question q = persistedQuestion();
-            Question another = persistedQuestion();
             Answer foreign = Answer.reconstitute(60L, 999L, 3, MarkdownBody.ofAnswer("这是别的问题下面的回答内容"), 0,
                     null, NOW, NOW, null, 0);
             assertThatThrownBy(() -> q.accept(foreign, ASKER, false)).isInstanceOf(BusinessRuleException.class);
-            assertThat(another.acceptedAnswerId()).isNull();
+            assertThat(q.acceptedAnswerId()).isNull();
         }
 
         @Test

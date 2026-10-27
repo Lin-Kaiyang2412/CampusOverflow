@@ -40,20 +40,20 @@ public class CommentService {
         long questionId;
         if (cmd.targetType() == TargetType.QUESTION) {
             Question question = questions.findById(cmd.targetId())
-                    .orElseThrow(() -> new NotFoundException("QUESTION_NOT_FOUND", "问题不存在，id=" + cmd.targetId()));
+                    .orElseThrow(() -> new NotFoundException("QA-4001", "问题不存在，id=" + cmd.targetId()));
             questionId = question.id();
         } else if (cmd.targetType() == TargetType.ANSWER) {
             Answer answer = answers.findById(cmd.targetId())
-                    .orElseThrow(() -> new NotFoundException("ANSWER_NOT_FOUND", "回答不存在，id=" + cmd.targetId()));
+                    .orElseThrow(() -> new NotFoundException("QA-4002", "回答不存在，id=" + cmd.targetId()));
             questionId = answer.questionId();
         } else {
-            throw new NotFoundException("COMMENT_TARGET_NOT_FOUND", "评论目标不存在");
+            throw new NotFoundException("QA-4003", "评论目标不存在");
         }
 
         Comment parent = null;
         if (cmd.parentId() != null) {
             parent = comments.findById(cmd.parentId())
-                    .orElseThrow(() -> new NotFoundException("COMMENT_NOT_FOUND", "父评论不存在，id=" + cmd.parentId()));
+                    .orElseThrow(() -> new NotFoundException("QA-4004", "父评论不存在，id=" + cmd.parentId()));
         }
 
         Comment saved = comments.save(Comment.post(cmd.targetType(), cmd.targetId(), questionId, actor.userId(),
