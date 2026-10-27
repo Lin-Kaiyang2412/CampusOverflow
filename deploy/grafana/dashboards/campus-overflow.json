@@ -2,7 +2,7 @@
   "uid": "campus-overflow",
   "title": "CampusOverflow 运行监控",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "timezone": "browser",
   "refresh": "15s",
   "time": {
@@ -240,6 +240,99 @@
       "fieldConfig": {
         "defaults": {
           "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 9,
+      "title": "HTTP P95 延迟（QS-01 详情页 ≤300ms / Lab 8 全局 ≤500ms）",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "campus-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{job=\"campus-overflow\"}[5m])))",
+          "refId": "A",
+          "legendFormat": "全局 P95"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_server_requests_seconds_bucket{job=\"campus-overflow\",uri=\"/api/v1/questions/{questionId}\"}[5m])))",
+          "refId": "B",
+          "legendFormat": "详情页 P95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.3
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 10,
+      "title": "活跃告警（Prometheus）",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "campus-prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 32
+      },
+      "targets": [
+        {
+          "expr": "sum(ALERTS{job=\"campus-overflow\",alertstate=\"firing\"})",
+          "refId": "A",
+          "legendFormat": "firing"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
         },
         "overrides": []
       },
