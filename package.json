@@ -1,0 +1,18 @@
+{
+  "name": "campus-overflow",
+  "private": true,
+  "description": "仓库级工具链：提交钩子与代码格式检查。前端应用依赖见 frontend/package.json。",
+  "scripts": {
+    "prepare": "husky",
+    "format": "prettier --write frontend",
+    "format:check": "prettier --check frontend"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.10"
+  },
+  "lint-staged": {
+    "frontend/**/*.{ts,tsx,js,jsx,json}": "prettier --check"
+  }
+}

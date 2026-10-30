@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+# 提交前钩子：只处理本次暂存的前端源文件，避免全量检查拖慢提交。
+# 由 lint-staged 负责按 glob 过滤并调用 prettier --write；
+# 若存在格式问题且无法自动修复（例如语法错误），提交会被中止。
+#
+# 首次克隆仓库后需执行一次 `npm install`（根目录）来激活钩子，
+# 该命令会通过 package.json 的 prepare 脚本设置 core.hooksPath。
+npx lint-staged
