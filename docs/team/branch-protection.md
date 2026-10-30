@@ -19,34 +19,55 @@
 > 上表结论由「合并行为反推」得出，不是直接读取配置。**如需逐项确认，请组长登录后在
 > `Settings → Branches` 截图留存**，作为 Lab 1 提交物 1 的正式证据。
 
-## 2. 目标状态
+## 2. 建议配置
 
-| 保护项 | 目标值 | 为什么 |
-| --- | --- | --- |
-| `main` 禁止直接 push | ✅ 开启（含管理员） | 杜绝绕过评审 |
-| 变更必须经 Pull Request | ✅ 开启 | 所有代码进 main 前可评审 |
-| 合并前需审批数 | **2** | 1 个 approve 不足以解锁（#33/#34/#36 实测）；拿到第 2 个才变 `clean`（#37 实测） |
-| Dismiss stale approvals | ✅ 开启 | 改完代码旧 LGTM 自动作废 |
-| Require review from Code Owners | ⚠️ **待定** | 仓库尚未配置 `.github/CODEOWNERS`，勾了也是空转，见第 5 节 |
-| 合并前必须通过状态检查 | ✅ `Backend build and verification` + `Frontend build` | 见第 3 节的名称对照 |
-| Require branches up to date | ✅ 开启 | 避免合并陈旧分支 |
-| 禁止 force push / 删除分支 | ✅ 开启 | 防止历史被改写或误删 |
-| 对话未解决不可合并 | ✅ 开启 | 评审意见必须闭环 |
+下表是**建议值**，不是已读到的配置。第 1 节才是实测到的现状；本节每一项的「依据」列
+写明它来自实测反推还是仍需组长确认。
+
+| 保护项 | 建议配置 | 依据 | 为什么 |
+| --- | --- | --- | --- |
+| `main` 禁止直接 push | 开启（含管理员） | ⚠️ 待组长确认 | 杜绝绕过评审 |
+| 变更必须经 Pull Request | 开启 | ✅ 实测 | 所有代码进 main 前可评审 |
+| 合并前需审批数 | **2** | ✅ 实测 | 1 个 approve 不足以解锁（#33/#34/#36）；拿到第 2 个才变 `clean`（#37） |
+| Dismiss stale approvals | 开启 | ⚠️ 待组长确认 | 改完代码旧 LGTM 自动作废 |
+| Require review from Code Owners | ⚠️ **暂不开启** | ✅ 实测（无 CODEOWNERS 文件） | 仓库尚未配置 `.github/CODEOWNERS`，勾了也是空转，见第 5 节 |
+| 合并前必须通过状态检查 | `Backend build and verification` + `Frontend build` | ⚠️ 待组长确认 | 见第 3 节的名称对照 |
+| Require branches up to date | 开启 | ⚠️ 待组长确认 | 避免合并陈旧分支 |
+| 禁止 force push / 删除分支 | 开启 | ⚠️ 待组长确认 | 防止历史被改写或误删 |
+| 对话未解决不可合并 | 开启 | ⚠️ 待组长确认 | 评审意见必须闭环 |
+
+> 标 ⚠️ 的 6 项**没有证据支撑**，只是合理建议。它们无法由成员账号读取（见第 1 节），
+> 需要组长在 `Settings → Branches` 核对后把本表改为「已确认」，或直接截图留档。
 
 ## 3. 状态检查名称对照（配置时最容易踩的坑）
 
 GitHub 上勾选必需检查时，填的必须是 **workflow 里 job 的 `name`**，不是 job id、也不是
 目录名。本仓库 `.github/workflows/ci.yml` 当前产出：
 
-| job id | 页面上显示的名字 | 建议设为必需 |
-| --- | --- | --- |
-| `backend` | `Backend build and verification` | ✅ 是 |
-| `frontend` | `Frontend build` | ✅ 是 |
-| `images` | `容器镜像构建与推送` | ❌ 否（PR 事件下会 skip） |
-| `deploy` | `部署到测试服务器` | ❌ 否（仅 main push 且需 `vars.DEPLOY_ENABLED=true`） |
+| job id | 页面上显示的名字 | 触发条件 | 建议设为必需 |
+| --- | --- | --- | --- |
+| `backend` | `Backend build and verification` | 全部 push / PR | ✅ 是 |
+| `frontend` | `Frontend build` | 全部 push / PR | ✅ 是 |
+| `images` | `容器镜像构建与推送` | `if: github.event_name == 'push'` | ❌ 否 |
+| `deploy` | `部署到测试服务器` | `if: push && refs/heads/main && vars.DEPLOY_ENABLED == 'true'` | ❌ 否 |
 
-> ⚠️ **不要把 `images` / `deploy` 设为必需检查**。这两个 job 在 `pull_request` 事件下
-> 恒为 `skipped`，一旦设为必需，所有 PR 会永久卡在「等待检查」而无法合并。
+**建议理由**：`images` / `deploy` 在 PR 事件下不执行，无法为 PR 提供任何验证保障，
+设为必需检查只会让「必需检查」这一栏看起来比实际更严格。**这不是阻塞问题**——
+按 GitHub 文档，被跳过的 job 会以 `Success` 上报，不会把 PR 卡住。
+
+### 三种「没跑」的区别（决定会不会卡住合并）
+
+| 情形 | 页面上显示 | 是否阻塞合并 |
+| --- | --- | --- |
+| job 被 `if` 条件跳过 | `skipped` | **不阻塞**，GitHub 按 Success 处理 |
+| workflow 未触发（`on:` 的 `branches` / `paths` 过滤不匹配） | 该检查**根本不出现**，合并框显示 `Expected — Waiting for status to be reported` | **永久阻塞** |
+| job 被改名或删除，但保护规则仍引用旧名字 | 同上，等待一个永远不会来的检查 | **永久阻塞** |
+
+> ⚠️ 真正会卡死 PR 的是后两种，本仓库**已经踩过一次**：`ci.yml` 早期把
+> `on.pull_request.branches` 写成 `[main, develop]`，导致以 feature 分支为 base 的
+> 堆叠 PR 完全不触发 CI，UI 上却显示 `mergeable_state=CLEAN`，看着像「检查都过了」。
+> 该问题已由 PR #28 改为 `branches: ["**"]` 修复。**改 `on:` 过滤器比改 job 的 `if:`
+> 危险得多**——前者让检查消失，后者只是让检查跳过。
 >
 > ⚠️ 检查项只有在**至少运行过一次之后**才会出现在候选列表里，所以顺序是：先推一个 PR
 > 让 CI 跑一遍，再去 `Settings → Branches` 勾选。
