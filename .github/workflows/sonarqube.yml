@@ -71,9 +71,13 @@ jobs:
 
       - name: 等待 SonarQube 就绪
         run: |
-          set -o pipefail
-          for i in $(seq 1 60); do
-            status=$(curl -s "$SONAR_URL/api/system/status" | sed -n 's/.*"status":"\([A-Z]*\)".*/\1/p')
+          # 注意：SonarQube 启动初期 docker-proxy 会 accept 后立刻断开，curl 拿到的是
+          # exit 56（Failure in receiving network data）而不是连接拒绝。GitHub Actions
+          # 默认 bash -e，命令替换失败会让整个 step 直接退出——第一次跑就栽在这里。
+          # 所以每次探测都必须容错，把「还没起来」当成正常状态继续等。
+          for i in $(seq 1 90); do
+            status=$(curl -s --max-time 5 "$SONAR_URL/api/system/status" 2>/dev/null \
+              | sed -n 's/.*"status":"\([A-Z]*\)".*/\1/p' || true)
             echo "第 $i 次探测：${status:-无响应}"
             if [ "$status" = "UP" ]; then
               echo "SonarQube 已就绪"
@@ -82,23 +86,27 @@ jobs:
             fi
             sleep 5
           done
-          echo "::error::SonarQube 300 秒内未就绪"
+          echo "::error::SonarQube 450 秒内未就绪"
           docker logs sonarqube 2>&1 | tail -100
           exit 1
 
       - name: 初始化管理员与 Token
         run: |
-          set -o pipefail
-          # 10.x 默认 admin/admin，但用它调 API 会被要求先改密码，所以先改再签发 token
-          curl -s -u admin:admin -X POST \
+          # 10.x 默认 admin/admin，但用它调 API 会被要求先改密码，所以先改再签发 token。
+          # 两个请求都容错：服务刚 UP 时偶发断连，重试几次比直接失败划算。
+          curl -s --max-time 30 --retry 5 --retry-connrefused --retry-delay 3 \
+            -u admin:admin -X POST \
             "$SONAR_URL/api/users/change_password?login=admin&previousPassword=admin&password=$SONAR_ADMIN_PASSWORD" \
-            | tee evidence/02-change-password.json
-          echo
-          token=$(curl -s -u "admin:$SONAR_ADMIN_PASSWORD" -X POST \
+            -o evidence/02-change-password.json || true
+          cat evidence/02-change-password.json 2>/dev/null; echo
+
+          token=$(curl -s --max-time 30 --retry 5 --retry-connrefused --retry-delay 3 \
+            -u "admin:$SONAR_ADMIN_PASSWORD" -X POST \
             "$SONAR_URL/api/user_tokens/generate?name=ci-${GITHUB_RUN_ID}" \
-            | python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))')
+            | python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))' || true)
           if [ -z "$token" ]; then
             echo "::error::无法生成 Sonar token"
+            curl -s -u "admin:$SONAR_ADMIN_PASSWORD" "$SONAR_URL/api/system/status" || true
             exit 1
           fi
           echo "::add-mask::$token"
