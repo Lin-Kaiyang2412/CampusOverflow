@@ -19,20 +19,25 @@
 
 分析范围：**273 个源文件**，Java 21，JaCoCo 报告已导入。
 
+Dashboard 截图见 [`sonarqube-2026-10-30-dashboard.png`](./sonarqube-2026-10-30-dashboard.png)（项目 `CampusOverflow / main`，8.3k 行代码，首次分析，46 个问题）。
+
 | 指标 | 值 |
 |---|---|
 | ncloc（非注释代码行） | 8331 |
-| 整体覆盖率 coverage | **33.6%** |
+| 整体覆盖率 coverage | **33.6%**（分母 2.7k 行可覆盖代码） |
 | 行覆盖率 line_coverage | 31.2% |
 | 分支覆盖率 branch_coverage | 43.8% |
 | Bugs | **2** |
 | Vulnerabilities | 0 |
+| Security Hotspots | **8**（E 级） |
 | Code Smells | 44 |
 | 重复率 duplicated_lines_density | 0.1% |
 | 可靠性评级 | C（3.0） |
 | 安全性评级 | A（1.0） |
 | 可维护性评级 | A（1.0） |
 | 技术债 sqale_index | 495 分钟 |
+
+合计 46 个待处理问题：2 个可靠性、44 个可维护性，另有 8 个安全热点待复核。
 
 ## 关于「质量门禁」
 
@@ -120,4 +125,10 @@ mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:5.1.0.4751:sonar \
 4. **projectKey 被覆盖**：Maven 环境下插件忽略 `sonar-project.properties` 里的 `sonar.projectKey`，改用 pom 的 `groupId:artifactId`（实测是 `com.campusoverflow:campus-overflow`）。必须显式 `-Dsonar.projectKey`。
 5. **采集抢跑**：报告上传后指标还在计算队列里，`qualitygate.wait=false` 时立刻采集会拿到空数组。要轮询 `/api/ce/component` 等队列清空。
 6. **截图版本不匹配**：镜像自带 playwright 1.48.0，裸 `npx` 会拉最新版 1.64.1，浏览器对不上。钉住 `playwright@1.48.0`。
-7. **截图拍到登录页**：`sonar.forceAuthentication` 默认为 true，需要 `SONAR_WEB_FORCEAUTHENTICATION=false` 才能匿名读 public 项目。
+7. **截图拍到登录页**：`sonar.forceAuthentication` 默认为 true。加 `SONAR_WEB_FORCEAUTHENTICATION=false` 环境变量**无效**，它实际是存在数据库里的设置，必须走 `POST /api/settings/set?key=sonar.forceAuthentication&value=false`。配合项目转 public 后，匿名才能读到 dashboard。
+
+## 截图里的 Quality Gate 显示 Passed，怎么理解
+
+Dashboard 上写着 `Quality Gate: Passed`，但这个结论**不能用来证明覆盖率达标**——同一页 Coverage 只有 33.6%。
+
+原因就是上一节说的：默认门禁只卡新代码，首次分析没有 baseline，条件不被评估，状态直接给 Passed。要看真实结论，以「按声明阈值核对」那张表为准。
