@@ -118,26 +118,29 @@ jobs:
           set +e
           # 默认的「Sonar way」门禁只卡新代码，首次分析没有基线，条件一条都不会被评估
           # （实测 conditions 是空数组、状态直接 OK）。那样门禁等于没有，所以这里按
-          # backend/sonar-project.properties 里声明的期望值建一个自定义门禁并绑定：
+          # backend/sonar-project.properties 里声明的期望值补上整体条件：
           #   覆盖率 > 70%、Bugs = 0、Vulnerabilities = 0
-          curl -s -u "admin:$SONAR_ADMIN_PASSWORD" -X POST \
-            "$SONAR_URL/api/qualitygates/create?name=CampusOverflow" \
-            -o evidence/02a-gate-create.json
-          echo "create 响应：$(cat evidence/02a-gate-create.json)"
+          #
+          # 不在新建 gate 上做：10.7 的 /api/qualitygates/create 返回体里没有 id
+          # （实测只回 {"name":"CampusOverflow"}），拿不到 id 就没法加条件。
+          # 直接给默认门禁补条件更稳，实例是临时的，不影响别处。
+          curl -s -u "admin:$SONAR_ADMIN_PASSWORD" "$SONAR_URL/api/qualitygates/list" \
+            -o evidence/02a-gates.json
+          cat evidence/02a-gates.json; echo
 
           gate_id=$(python3 -c '
           import json
-          try:
-              print(json.load(open("evidence/02a-gate-create.json", encoding="utf-8")).get("id", ""))
-          except Exception:
-              print("")
+          d = json.load(open("evidence/02a-gates.json", encoding="utf-8"))
+          for g in d.get("qualitygates", []):
+              if g.get("isDefault"):
+                  print(g.get("id", "")); break
           ')
 
           if [ -z "$gate_id" ]; then
-            echo "::warning::自定义门禁创建失败，将使用默认门禁"
+            echo "::warning::找不到默认门禁，跳过条件配置"
             exit 0
           fi
-          echo "门禁 id=$gate_id"
+          echo "默认门禁 id=$gate_id"
 
           for cond in "coverage:LT:70" "bugs:GT:0" "vulnerabilities:GT:0"; do
             metric=${cond%%:*}; rest=${cond#*:}; op=${rest%%:*}; thr=${rest#*:}
@@ -147,9 +150,6 @@ jobs:
             echo "  条件：$metric $op $thr"
           done
 
-          curl -s -u "admin:$SONAR_ADMIN_PASSWORD" -X POST \
-            "$SONAR_URL/api/qualitygates/select?projectKey=$SONAR_PROJECT_KEY&gateId=$gate_id" \
-            -o /dev/null
           curl -s -u "admin:$SONAR_ADMIN_PASSWORD" \
             "$SONAR_URL/api/qualitygates/show?id=$gate_id" -o evidence/02b-qualitygate-config.json
           cat evidence/02b-qualitygate-config.json; echo
@@ -266,10 +266,12 @@ jobs:
           # 项目默认 private，先转 public 才能匿名访问
           curl -s -u "admin:$SONAR_ADMIN_PASSWORD" -X POST \
             "$SONAR_URL/api/projects/update_visibility?project=$SONAR_PROJECT_KEY&visibility=public" || true
+          # 镜像里自带的 playwright 是 1.48.0，而裸 npx 会去 npm 拉最新版（1.64.1），
+          # 两者浏览器版本对不上，直接报版本不匹配、截不出图。钉住版本即可。
           docker run --rm --network host \
             -v "$PWD/evidence:/evidence" \
             mcr.microsoft.com/playwright:v1.48.0-jammy \
-            npx playwright screenshot --wait-for-timeout 8000 --full-page \
+            npx --yes playwright@1.48.0 screenshot --wait-for-timeout 8000 --full-page \
             "$SONAR_URL/dashboard?id=$SONAR_PROJECT_KEY" /evidence/08-dashboard.png 2>&1 | tail -10
           ls -l evidence/08-dashboard.png || echo "截图未产出（不影响扫描结果）"
 
