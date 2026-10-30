@@ -10,6 +10,7 @@
 name: 编排冒烟（完整容器栈）
 
 on:
+  # 手动触发：需要出证据时点一次
   workflow_dispatch:
     inputs:
       image_tag:
@@ -17,6 +18,12 @@ on:
         required: false
         default: "latest"
         type: string
+  # 改动编排文件本身时自动跑一遍：改 compose / nginx / Dockerfile 最容易把栈弄坏，
+  # 而这类改动恰恰是普通单测覆盖不到的。只监听这几个路径，避免每个 PR 都跑。
+  pull_request:
+    paths:
+      - "deploy/**"
+      - ".github/workflows/stack-smoke.yml"
 
 permissions:
   contents: read
