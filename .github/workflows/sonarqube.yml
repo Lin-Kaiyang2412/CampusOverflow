@@ -271,9 +271,15 @@ jobs:
         if: always()
         continue-on-error: true
         run: |
-          # 项目默认 private，先转 public 才能匿名访问
+          # 匿名访问要过两道：项目得是 public，且实例不能强制登录。
+          # 后者用 SONAR_WEB_FORCEAUTHENTICATION 环境变量试过没用（截出来还是登录页），
+          # 它实际是存在数据库里的设置，只能走 /api/settings/set 改。
+          curl -s -u "admin:$SONAR_ADMIN_PASSWORD" -X POST \
+            "$SONAR_URL/api/settings/set?key=sonar.forceAuthentication&value=false" || true
           curl -s -u "admin:$SONAR_ADMIN_PASSWORD" -X POST \
             "$SONAR_URL/api/projects/update_visibility?project=$SONAR_PROJECT_KEY&visibility=public" || true
+          sleep 3
+
           # 镜像里自带的 playwright 是 1.48.0，而裸 npx 会去 npm 拉最新版（1.64.1），
           # 两者浏览器版本对不上，直接报版本不匹配、截不出图。钉住版本即可。
           docker run --rm --network host \
