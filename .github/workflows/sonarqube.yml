@@ -120,9 +120,18 @@ jobs:
           # （实测 conditions 是空数组、状态直接 OK）。那样门禁等于没有，所以这里按
           # backend/sonar-project.properties 里声明的期望值建一个自定义门禁并绑定：
           #   覆盖率 > 70%、Bugs = 0、Vulnerabilities = 0
-          gate_id=$(curl -s -u "admin:$SONAR_ADMIN_PASSWORD" -X POST \
+          curl -s -u "admin:$SONAR_ADMIN_PASSWORD" -X POST \
             "$SONAR_URL/api/qualitygates/create?name=CampusOverflow" \
-            | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))')
+            -o evidence/02a-gate-create.json
+          echo "create 响应：$(cat evidence/02a-gate-create.json)"
+
+          gate_id=$(python3 -c '
+          import json
+          try:
+              print(json.load(open("evidence/02a-gate-create.json", encoding="utf-8")).get("id", ""))
+          except Exception:
+              print("")
+          ')
 
           if [ -z "$gate_id" ]; then
             echo "::warning::自定义门禁创建失败，将使用默认门禁"
@@ -173,6 +182,36 @@ jobs:
             -Dsonar.projectName=CampusOverflow \
             -Dsonar.qualitygate.wait=false \
             2>&1 | tee ../evidence/04-sonar-scan.log | tail -40
+
+      - name: 等待分析报告处理完成
+        if: always()
+        run: |
+          set +e
+          # 上传完报告不等于指标算完了。第四次跑就是因为扫完立刻去采集，
+          # measures 拿到空数组、门禁状态还是 NONE——报告还在计算队列里。
+          # 这里轮询计算引擎队列，空下来再采集。
+          for i in $(seq 1 60); do
+            pending=$(curl -s -u "admin:$SONAR_ADMIN_PASSWORD" \
+              "$SONAR_URL/api/ce/component?component=$SONAR_PROJECT_KEY" \
+              | python3 -c '
+          import json, sys
+          try:
+              d = json.load(sys.stdin)
+          except Exception:
+              print("1"); raise SystemExit
+          q = len(d.get("queue") or [])
+          cur = d.get("current") or {}
+          busy = 1 if cur.get("status") in ("PENDING", "IN_PROGRESS") else 0
+          print(q + busy)
+          ' 2>/dev/null)
+            echo "第 $i 次探测：待处理任务 ${pending:-未知}"
+            if [ "$pending" = "0" ]; then
+              echo "分析报告已处理完成"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::warning::等待 300 秒仍未处理完，继续采集（数据可能不全）"
 
       - name: 采集质量门禁与指标
         if: always()
