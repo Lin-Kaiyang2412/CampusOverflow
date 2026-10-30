@@ -11,7 +11,7 @@
 - 评论提交、刷新后保留、纯空白评论禁用提交。
 - 浏览器窄窗口下列表和详情无明显截断或横向溢出；这不等于真机全覆盖。
 - 仅一条问题时分页前后按钮禁用；跨页仍待验证。
-- Prometheus 经 host.docker.internal:8080 采集 Mac 上的 Spring Boot，目标 UP、无采集错误，JVM 内存与请求率有数据。
+- Prometheus 经 host.docker.internal:8080 采集宿主机（本次验收为 Mac）上的 Spring Boot，目标 UP、无采集错误，JVM 内存与请求率有数据。
 - Grafana 截图确认可用性、请求率与平均响应时间显示数据。旧 backend:8080 的历史 0 不代表当前采集失败。5xx 无数据未单独验证。
 - 执行人确认前端 Docker 镜像构建成功；http://localhost:8088 显示问题列表；进入详情后刷新正常。
 
