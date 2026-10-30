@@ -1,0 +1,160 @@
+# 编排冒烟验证：在 CI runner 上把 deploy/docker-compose.yml 的完整容器栈真正跑起来，
+# 验证「镜像能启动、依赖顺序正确、健康检查通过、Web 能访问后端」。
+#
+# 这不是部署。它不碰任何服务器，产物是证据文件（health JSON / compose ps / 日志），
+# 用来回答「这套编排到底能不能跑」，而不是「线上在哪」。
+#
+# 为什么要这个：团队没有可 SSH 的服务器，仓库变量 DEPLOY_ENABLED 也一直没配，
+# 导致 ci.yml 里的 deploy job 从未执行过（见 Issue #39）。而 runner 自带 Docker，
+# 可以用它把编排跑一遍，拿到与本地 compose 等价的结果。
+name: 编排冒烟（完整容器栈）
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "GHCR 镜像标签（默认 latest）"
+        required: false
+        default: "latest"
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: stack-smoke
+  cancel-in-progress: false
+
+jobs:
+  stack:
+    name: 启动容器栈并验证健康
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      BACKEND_IMAGE: ghcr.io/lin-kaiyang2412/campusoverflow-backend:${{ github.event.inputs.image_tag || 'latest' }}
+      WEB_IMAGE: ghcr.io/lin-kaiyang2412/campusoverflow-web:${{ github.event.inputs.image_tag || 'latest' }}
+      COMPOSE_FILE: deploy/docker-compose.yml
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 记录运行环境
+        run: |
+          mkdir -p evidence
+          {
+            echo "### 运行环境"
+            echo ""
+            echo "- 触发方式: ${{ github.event_name }}"
+            echo "- 分支/引用: ${{ github.ref }}"
+            echo "- 提交: ${{ github.sha }}"
+            echo "- 后端镜像: $BACKEND_IMAGE"
+            echo "- 前端镜像: $WEB_IMAGE"
+            echo "- 时间(UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo ""
+            echo '```'
+            docker version --format 'Docker Engine {{.Server.Version}}'
+            docker compose version
+            uname -a
+            echo '```'
+          } > evidence/00-environment.md
+          cat evidence/00-environment.md
+
+      - name: 拉取镜像
+        run: |
+          # 镜像是公开包，匿名即可拉取；显式 pull 便于在启动失败前先暴露拉取问题
+          docker compose -f "$COMPOSE_FILE" pull mysql redis backend web 2>&1 | tee evidence/01-pull.log
+          docker images --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}' \
+            > evidence/02-images.txt
+          cat evidence/02-images.txt
+
+      - name: 启动容器栈并等待健康
+        run: |
+          # --wait 会等到所有带 healthcheck 的服务变 healthy，任一不健康即非零退出
+          docker compose -f "$COMPOSE_FILE" up -d --wait --wait-timeout 300 2>&1 | tee evidence/03-up.log
+
+      - name: 采集健康与可达性证据
+        if: always()
+        run: |
+          set +e
+          {
+            echo "### compose ps"
+            echo '```'
+            docker compose -f "$COMPOSE_FILE" ps
+            echo '```'
+            echo ""
+            echo "### docker ps"
+            echo '```'
+            docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}'
+            echo '```'
+          } > evidence/04-containers.md
+          cat evidence/04-containers.md
+
+          echo "--- /actuator/health"
+          curl -sS -m 20 -o evidence/05-health.json -w 'HTTP %{http_code}\n' \
+            http://localhost:8080/actuator/health | tee evidence/05-health.status.txt
+          cat evidence/05-health.json; echo
+
+          echo "--- /actuator/health/readiness"
+          curl -sS -m 20 -o evidence/06-readiness.json -w 'HTTP %{http_code}\n' \
+            http://localhost:8080/actuator/health/readiness | tee evidence/06-readiness.status.txt
+          cat evidence/06-readiness.json; echo
+
+          echo "--- 前端首页"
+          curl -sS -m 20 -o /dev/null -w 'HTTP %{http_code}\n' \
+            http://localhost/ | tee evidence/07-web.status.txt
+
+          echo "--- 前端 /healthz"
+          curl -sS -m 20 -o evidence/08-healthz.txt -w 'HTTP %{http_code}\n' \
+            http://localhost/healthz | tee evidence/08-healthz.status.txt
+
+          echo "--- 指标端点"
+          curl -sS -m 20 http://localhost:8080/actuator/prometheus \
+            | head -40 > evidence/09-metrics.txt
+          wc -l < evidence/09-metrics.txt
+
+      - name: 汇总判定
+        if: always()
+        run: |
+          set +e
+          backend_code=$(sed -n 's/HTTP //p' evidence/05-health.status.txt 2>/dev/null)
+          web_code=$(sed -n 's/HTTP //p' evidence/07-web.status.txt 2>/dev/null)
+          running=$(docker compose -f "$COMPOSE_FILE" ps --status running -q 2>/dev/null | wc -l)
+          {
+            echo "### 判定"
+            echo ""
+            echo "| 检查项 | 期望 | 实际 |"
+            echo "|---|---|---|"
+            echo "| 后端 /actuator/health | 200 | ${backend_code:-未取到} |"
+            echo "| 前端首页 | 200 | ${web_code:-未取到} |"
+            echo "| 运行中容器数 | 4 | ${running} |"
+          } | tee evidence/10-verdict.md
+          if [ "$backend_code" != "200" ] || [ "$web_code" != "200" ]; then
+            echo "::error::健康检查未通过，详见 evidence/05-health.json 与 07-web.status.txt"
+            exit 1
+          fi
+
+      - name: 收集容器日志
+        if: always()
+        run: |
+          mkdir -p evidence/logs
+          for svc in mysql redis backend web; do
+            docker compose -f "$COMPOSE_FILE" logs --no-color --tail 400 "$svc" \
+              > "evidence/logs/$svc.log" 2>&1
+          done
+          ls -l evidence/logs
+
+      - name: 上传证据
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stack-smoke-evidence
+          path: evidence/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: 清理
+        if: always()
+        run: docker compose -f "$COMPOSE_FILE" down -v --remove-orphans || true
