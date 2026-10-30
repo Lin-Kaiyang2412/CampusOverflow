@@ -67,6 +67,7 @@ jobs:
             -e SONAR_JDBC_USERNAME=sonar \
             -e SONAR_JDBC_PASSWORD=sonar \
             -e SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true \
+            -e SONAR_WEB_FORCEAUTHENTICATION=false \
             sonarqube:10.7-community
 
       - name: 等待 SonarQube 就绪
