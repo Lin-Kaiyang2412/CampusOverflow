@@ -37,11 +37,12 @@
         <jacoco.version>0.8.12</jacoco.version>
         <!-- 修复新版 Docker Engine 与 Testcontainers 默认 Docker API 版本不兼容 -->
         <testcontainers.version>1.21.4</testcontainers.version>
-        <!-- 领域层行覆盖率门禁（适应度函数 FF-4）：只统计 com/campusoverflow/{ctx}/domain/**，
-             应用层/基础设施/启动装配类不计入。低于阈值时 verify 直接失败。
-             当前实测基线：qa 82.9% / discovery 78.9% / identity 75.7% / reputation 74%+，
-             先卡 0.70 防止回退；Sprint 4 末目标 0.80，核心聚合（co-qa-domain）单独提到 0.90。 -->
         <domain.coverage.minimum>0.70</domain.coverage.minimum>
+        <!-- 静态检查（适应度函数 FF-9）：规则集见 backend/checkstyle.xml。
+             用 multiModuleProjectDirectory 定位：无论从仓库根执行 `mvn -f backend/pom.xml`
+             还是 `cd backend && mvn`，该属性都解析到 backend 目录，配置路径才不会错位。 -->
+        <checkstyle.version>3.4.0</checkstyle.version>
+        <checkstyle.config.location>${maven.multiModuleProjectDirectory}/checkstyle.xml</checkstyle.config.location>
     </properties>
 
     <dependencyManagement>
@@ -192,9 +193,38 @@
                     <artifactId>jacoco-maven-plugin</artifactId>
                     <version>${jacoco.version}</version>
                 </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-checkstyle-plugin</artifactId>
+                    <version>${checkstyle.version}</version>
+                </plugin>
             </plugins>
         </pluginManagement>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-checkstyle-plugin</artifactId>
+                <configuration>
+                    <configLocation>${checkstyle.config.location}</configLocation>
+                    <consoleOutput>true</consoleOutput>
+                    <failsOnError>true</failsOnError>
+                    <!-- 只按 error 级别判定，规则集里所有检查都是 error -->
+                    <violationSeverity>error</violationSeverity>
+                    <!-- 测试源码先不查：测试里为了可读性常有多行构造、魔法值 -->
+                    <includeTestSourceDirectory>false</includeTestSourceDirectory>
+                    <inputEncoding>UTF-8</inputEncoding>
+                </configuration>
+                <executions>
+                    <!-- 绑到 validate：在编译之前就失败，不用等一轮完整构建 -->
+                    <execution>
+                        <id>checkstyle-validate</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
