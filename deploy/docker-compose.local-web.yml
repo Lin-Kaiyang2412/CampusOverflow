@@ -1,4 +1,4 @@
-# 独立验证前端镜像、Nginx 和 Mac 后端代理，不启动第二个后端。
+# 独立验证前端镜像、Nginx 和宿主机后端代理，不启动第二个后端。
 name: campus-overflow-local-web
 services:
   web:
