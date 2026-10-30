@@ -113,46 +113,18 @@ jobs:
           echo "SONAR_TOKEN=$token" >> "$GITHUB_ENV"
           echo "token 已生成（长度 ${#token}）"
 
-      - name: 配置质量门禁
+      - name: 记录质量门禁配置
         run: |
           set +e
-          # 默认的「Sonar way」门禁只卡新代码，首次分析没有基线，条件一条都不会被评估
-          # （实测 conditions 是空数组、状态直接 OK）。那样门禁等于没有，所以这里按
-          # backend/sonar-project.properties 里声明的期望值补上整体条件：
-          #   覆盖率 > 70%、Bugs = 0、Vulnerabilities = 0
-          #
-          # 不在新建 gate 上做：10.7 的 /api/qualitygates/create 返回体里没有 id
-          # （实测只回 {"name":"CampusOverflow"}），拿不到 id 就没法加条件。
-          # 直接给默认门禁补条件更稳，实例是临时的，不影响别处。
+          # 试过按 sonar-project.properties 声明的阈值建自定义门禁，两条路都堵死：
+          #   - /api/qualitygates/create 返回体里没有 id（只回 {"name":"CampusOverflow"}）
+          #   - /api/qualitygates/list 返回的默认门禁也没有 id，且 actions.manageConditions
+          #     为 false —— 内置门禁不允许改条件
+          # 所以这里只把实例上的门禁配置如实存证，阈值核对放到汇总步骤里做：
+          # 直接拿实际指标与声明值比对，比依赖服务端配置更可靠。
           curl -s -u "admin:$SONAR_ADMIN_PASSWORD" "$SONAR_URL/api/qualitygates/list" \
             -o evidence/02a-gates.json
           cat evidence/02a-gates.json; echo
-
-          gate_id=$(python3 -c '
-          import json
-          d = json.load(open("evidence/02a-gates.json", encoding="utf-8"))
-          for g in d.get("qualitygates", []):
-              if g.get("isDefault"):
-                  print(g.get("id", "")); break
-          ')
-
-          if [ -z "$gate_id" ]; then
-            echo "::warning::找不到默认门禁，跳过条件配置"
-            exit 0
-          fi
-          echo "默认门禁 id=$gate_id"
-
-          for cond in "coverage:LT:70" "bugs:GT:0" "vulnerabilities:GT:0"; do
-            metric=${cond%%:*}; rest=${cond#*:}; op=${rest%%:*}; thr=${rest#*:}
-            curl -s -u "admin:$SONAR_ADMIN_PASSWORD" -X POST \
-              "$SONAR_URL/api/qualitygates/create_condition?gateId=$gate_id&metric=$metric&op=$op&error=$thr" \
-              -o /dev/null
-            echo "  条件：$metric $op $thr"
-          done
-
-          curl -s -u "admin:$SONAR_ADMIN_PASSWORD" \
-            "$SONAR_URL/api/qualitygates/show?id=$gate_id" -o evidence/02b-qualitygate-config.json
-          cat evidence/02b-qualitygate-config.json; echo
 
       - name: 编译并跑测试（生成 JaCoCo 报告）
         working-directory: backend
@@ -235,26 +207,61 @@ jobs:
           base = "evidence"
           lines = ["### SonarQube 扫描结果", ""]
 
+          measures = {}
           try:
               qg = json.load(open(os.path.join(base, "05-qualitygate.json"), encoding="utf-8"))
               st = qg.get("projectStatus", {})
               lines.append("| 项 | 值 |")
               lines.append("|---|---|")
-              lines.append("| 质量门禁 | **%s** |" % st.get("status", "未知"))
+              lines.append("| 服务端门禁状态 | **%s** |" % st.get("status", "未知"))
               for c in st.get("conditions", []):
                   lines.append("| %s | %s（实际 %s，阈值 %s） |" % (
                       c.get("metricKey"), c.get("status"),
                       c.get("actualValue", "-"), c.get("errorThreshold", "-")))
           except Exception as e:
-              lines.append("质量门禁读取失败：%s" % e)
+              lines.append("门禁读取失败：%s" % e)
 
           lines += ["", "| 指标 | 值 |", "|---|---|"]
           try:
               m = json.load(open(os.path.join(base, "06-measures.json"), encoding="utf-8"))
               for item in m.get("component", {}).get("measures", []):
+                  measures[item["metric"]] = item.get("value", "-")
                   lines.append("| %s | %s |" % (item["metric"], item.get("value", "-")))
           except Exception as e:
               lines.append("| 指标读取失败 | %s |" % e)
+
+          # 服务端门禁卡的是「新代码」，首次分析没有基线，条件一条都不会被评估
+          # （conditions 为空、状态直接 OK）。所以这里按 sonar-project.properties
+          # 里声明的阈值对整体指标做一次独立核对，结论才是可信的。
+          lines += ["", "### 按 sonar-project.properties 声明的阈值核对", "",
+                    "声明值：覆盖率 > 70%、Bugs = 0、Vulnerabilities = 0", "",
+                    "| 条件 | 声明 | 实际 | 结论 |", "|---|---|---|---|"]
+
+          def num(key):
+              try:
+                  return float(measures.get(key))
+              except (TypeError, ValueError):
+                  return None
+
+          checks = [
+              ("coverage", "> 70", 70.0, lambda a, t: a > t),
+              ("bugs", "= 0", 0.0, lambda a, t: a == t),
+              ("vulnerabilities", "= 0", 0.0, lambda a, t: a == t),
+          ]
+          failed = []
+          for key, label, thr, ok in checks:
+              actual = num(key)
+              if actual is None:
+                  lines.append("| %s | %s | 未取到 | 无法判定 |" % (key, label))
+                  failed.append(key)
+                  continue
+              passed = ok(actual, thr)
+              lines.append("| %s | %s | %s | %s |" % (
+                  key, label, measures.get(key), "通过" if passed else "**不通过**"))
+              if not passed:
+                  failed.append(key)
+
+          lines += ["", "**总体：%s**" % ("全部通过" if not failed else "不通过（%s）" % "、".join(failed))]
           print("\n".join(lines))
           PY
           cat evidence/07-summary.md >> "$GITHUB_STEP_SUMMARY"
