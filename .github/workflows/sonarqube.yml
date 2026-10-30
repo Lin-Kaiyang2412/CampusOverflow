@@ -1,0 +1,311 @@
+# SonarQube 静态扫描：在 runner 上起一个临时 SonarQube 实例，把 backend 真扫一遍，
+# 产出质量门禁结果与各项指标（Lab 7 提交物 1「SonarQube Dashboard」）。
+#
+# 为什么要在 CI 里跑：`backend/sonar-project.properties` 早就写好了，但 compose 的服务
+# 清单里没有 sonarqube，团队也没有可用的实例，所以这个配置从落地起就没执行过一次
+# （见 Issue #39 第 1 项）。Dashboard 截图因此一直交不出来。
+#
+# 这里用 sonarqube:10.7-community + postgres:16 现场起实例，扫完即销毁，
+# 不需要任何外部账号或 Token。证据是 API 返回的 JSON，比截图更可核验。
+name: SonarQube 扫描
+
+on:
+  # 手动触发：需要出 Dashboard 证据时点一次
+  workflow_dispatch:
+  # 改了扫描配置就跑一遍，避免配置悄悄失效
+  pull_request:
+    paths:
+      - ".github/workflows/sonarqube.yml"
+      - "backend/sonar-project.properties"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sonarqube-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    name: 起实例并扫描
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    env:
+      SONAR_URL: http://localhost:9000
+      SONAR_PROJECT_KEY: campus-overflow
+      # 10.x 首次启动仍是 admin/admin，但必须改成一个满足复杂度要求的密码才能生成 token
+      SONAR_ADMIN_PASSWORD: SonarAdminPass123
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          # Sonar 需要完整历史来算 blame / 新代码周期
+          fetch-depth: 0
+
+      - name: 设置 JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: 启动 SonarQube 与 Postgres
+        run: |
+          mkdir -p evidence
+          # Elasticsearch 对 vm.max_map_count 有硬要求，runner 默认 65530 会直接拒绝启动。
+          # SONAR_ES_BOOTSTRAP_CHECKS_DISABLE 同时关掉其余生产环境检查。
+          sudo sysctl -w vm.max_map_count=262144
+
+          docker network create sonar-net
+          docker run -d --name sonar-db --network sonar-net \
+            -e POSTGRES_USER=sonar -e POSTGRES_PASSWORD=sonar -e POSTGRES_DB=sonar \
+            postgres:16-alpine
+          docker run -d --name sonarqube --network sonar-net -p 9000:9000 \
+            -e SONAR_JDBC_URL=jdbc:postgresql://sonar-db:5432/sonar \
+            -e SONAR_JDBC_USERNAME=sonar \
+            -e SONAR_JDBC_PASSWORD=sonar \
+            -e SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true \
+            -e SONAR_WEB_FORCEAUTHENTICATION=false \
+            sonarqube:10.7-community
+
+      - name: 等待 SonarQube 就绪
+        run: |
+          # 注意：SonarQube 启动初期 docker-proxy 会 accept 后立刻断开，curl 拿到的是
+          # exit 56（Failure in receiving network data）而不是连接拒绝。GitHub Actions
+          # 默认 bash -e，命令替换失败会让整个 step 直接退出——第一次跑就栽在这里。
+          # 所以每次探测都必须容错，把「还没起来」当成正常状态继续等。
+          for i in $(seq 1 90); do
+            status=$(curl -s --max-time 5 "$SONAR_URL/api/system/status" 2>/dev/null \
+              | sed -n 's/.*"status":"\([A-Z]*\)".*/\1/p' || true)
+            echo "第 $i 次探测：${status:-无响应}"
+            if [ "$status" = "UP" ]; then
+              echo "SonarQube 已就绪"
+              curl -s "$SONAR_URL/api/system/status" | tee evidence/01-system-status.json
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::SonarQube 450 秒内未就绪"
+          docker logs sonarqube 2>&1 | tail -100
+          exit 1
+
+      - name: 初始化管理员与 Token
+        run: |
+          # 10.x 默认 admin/admin，但用它调 API 会被要求先改密码，所以先改再签发 token。
+          # 两个请求都容错：服务刚 UP 时偶发断连，重试几次比直接失败划算。
+          curl -s --max-time 30 --retry 5 --retry-connrefused --retry-delay 3 \
+            -u admin:admin -X POST \
+            "$SONAR_URL/api/users/change_password?login=admin&previousPassword=admin&password=$SONAR_ADMIN_PASSWORD" \
+            -o evidence/02-change-password.json || true
+          cat evidence/02-change-password.json 2>/dev/null; echo
+
+          token=$(curl -s --max-time 30 --retry 5 --retry-connrefused --retry-delay 3 \
+            -u "admin:$SONAR_ADMIN_PASSWORD" -X POST \
+            "$SONAR_URL/api/user_tokens/generate?name=ci-${GITHUB_RUN_ID}" \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin).get("token",""))' || true)
+          if [ -z "$token" ]; then
+            echo "::error::无法生成 Sonar token"
+            curl -s -u "admin:$SONAR_ADMIN_PASSWORD" "$SONAR_URL/api/system/status" || true
+            exit 1
+          fi
+          echo "::add-mask::$token"
+          echo "SONAR_TOKEN=$token" >> "$GITHUB_ENV"
+          echo "token 已生成（长度 ${#token}）"
+
+      - name: 记录质量门禁配置
+        run: |
+          set +e
+          # 试过按 sonar-project.properties 声明的阈值建自定义门禁，两条路都堵死：
+          #   - /api/qualitygates/create 返回体里没有 id（只回 {"name":"CampusOverflow"}）
+          #   - /api/qualitygates/list 返回的默认门禁也没有 id，且 actions.manageConditions
+          #     为 false —— 内置门禁不允许改条件
+          # 所以这里只把实例上的门禁配置如实存证，阈值核对放到汇总步骤里做：
+          # 直接拿实际指标与声明值比对，比依赖服务端配置更可靠。
+          curl -s -u "admin:$SONAR_ADMIN_PASSWORD" "$SONAR_URL/api/qualitygates/list" \
+            -o evidence/02a-gates.json
+          cat evidence/02a-gates.json; echo
+
+      - name: 编译并跑测试（生成 JaCoCo 报告）
+        working-directory: backend
+        run: |
+          set -o pipefail
+          mvn -B -DskipITs verify 2>&1 | tee ../evidence/03-mvn-verify.log | tail -30
+
+      - name: 执行 SonarQube 扫描
+        working-directory: backend
+        run: |
+          set -o pipefail
+          # 用完整坐标而不是 `mvn sonar:sonar`：Maven 的 pluginGroups 默认只有
+          # org.apache.maven.plugins 和 org.codehaus.mojo，解析不到 sonar 前缀。
+          #
+          # 必须显式传 sonar.projectKey：Maven 环境下插件会忽略
+          # sonar-project.properties 里的 projectKey，改用 pom 的 groupId:artifactId
+          # （实测扫出来是 com.campusoverflow:campus-overflow，按 campus-overflow 查是 404）。
+          #
+          # qualitygate.wait 保持 false：门禁按 sonar-project.properties 声明的阈值
+          # （覆盖率 > 70%、Bugs = 0、Vulnerabilities = 0）配置，而当前实际值是
+          # 整体覆盖率 33.6%、bugs 2 —— 门禁必然判 ERROR。这里不把它变成 job 失败，
+          # 是因为长期红灯只会被习惯性忽略，结论放在 evidence 与 step summary 里更有效。
+          mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:5.1.0.4751:sonar \
+            -Dsonar.host.url="$SONAR_URL" \
+            -Dsonar.token="$SONAR_TOKEN" \
+            -Dsonar.projectKey="$SONAR_PROJECT_KEY" \
+            -Dsonar.projectName=CampusOverflow \
+            -Dsonar.qualitygate.wait=false \
+            2>&1 | tee ../evidence/04-sonar-scan.log | tail -40
+
+      - name: 等待分析报告处理完成
+        if: always()
+        run: |
+          set +e
+          # 上传完报告不等于指标算完了。第四次跑就是因为扫完立刻去采集，
+          # measures 拿到空数组、门禁状态还是 NONE——报告还在计算队列里。
+          # 这里轮询计算引擎队列，空下来再采集。
+          for i in $(seq 1 60); do
+            pending=$(curl -s -u "admin:$SONAR_ADMIN_PASSWORD" \
+              "$SONAR_URL/api/ce/component?component=$SONAR_PROJECT_KEY" \
+              | python3 -c '
+          import json, sys
+          try:
+              d = json.load(sys.stdin)
+          except Exception:
+              print("1"); raise SystemExit
+          q = len(d.get("queue") or [])
+          cur = d.get("current") or {}
+          busy = 1 if cur.get("status") in ("PENDING", "IN_PROGRESS") else 0
+          print(q + busy)
+          ' 2>/dev/null)
+            echo "第 $i 次探测：待处理任务 ${pending:-未知}"
+            if [ "$pending" = "0" ]; then
+              echo "分析报告已处理完成"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::warning::等待 300 秒仍未处理完，继续采集（数据可能不全）"
+
+      - name: 采集质量门禁与指标
+        if: always()
+        run: |
+          set +e
+          # 先把实例里实际存在的项目列出来：万一 projectKey 没对上，这份清单能直接指出
+          # 真实 key 是什么，不用再翻一遍扫描日志
+          curl -s -u "admin:$SONAR_ADMIN_PASSWORD" "$SONAR_URL/api/projects/search" \
+            -o evidence/05a-projects.json
+          cat evidence/05a-projects.json; echo
+
+          curl -s -u "admin:$SONAR_ADMIN_PASSWORD" \
+            "$SONAR_URL/api/qualitygates/project_status?projectKey=$SONAR_PROJECT_KEY" \
+            -o evidence/05-qualitygate.json
+          curl -s -u "admin:$SONAR_ADMIN_PASSWORD" \
+            "$SONAR_URL/api/measures/component?component=$SONAR_PROJECT_KEY&metricKeys=coverage,line_coverage,branch_coverage,bugs,vulnerabilities,code_smells,duplicated_lines_density,ncloc,sqale_index,reliability_rating,security_rating,sqale_rating" \
+            -o evidence/06-measures.json
+
+          python3 - <<'PY' | tee evidence/07-summary.md
+          import json, os
+          base = "evidence"
+          lines = ["### SonarQube 扫描结果", ""]
+
+          measures = {}
+          try:
+              qg = json.load(open(os.path.join(base, "05-qualitygate.json"), encoding="utf-8"))
+              st = qg.get("projectStatus", {})
+              lines.append("| 项 | 值 |")
+              lines.append("|---|---|")
+              lines.append("| 服务端门禁状态 | **%s** |" % st.get("status", "未知"))
+              for c in st.get("conditions", []):
+                  lines.append("| %s | %s（实际 %s，阈值 %s） |" % (
+                      c.get("metricKey"), c.get("status"),
+                      c.get("actualValue", "-"), c.get("errorThreshold", "-")))
+          except Exception as e:
+              lines.append("门禁读取失败：%s" % e)
+
+          lines += ["", "| 指标 | 值 |", "|---|---|"]
+          try:
+              m = json.load(open(os.path.join(base, "06-measures.json"), encoding="utf-8"))
+              for item in m.get("component", {}).get("measures", []):
+                  measures[item["metric"]] = item.get("value", "-")
+                  lines.append("| %s | %s |" % (item["metric"], item.get("value", "-")))
+          except Exception as e:
+              lines.append("| 指标读取失败 | %s |" % e)
+
+          # 服务端门禁卡的是「新代码」，首次分析没有基线，条件一条都不会被评估
+          # （conditions 为空、状态直接 OK）。所以这里按 sonar-project.properties
+          # 里声明的阈值对整体指标做一次独立核对，结论才是可信的。
+          lines += ["", "### 按 sonar-project.properties 声明的阈值核对", "",
+                    "声明值：覆盖率 > 70%、Bugs = 0、Vulnerabilities = 0", "",
+                    "| 条件 | 声明 | 实际 | 结论 |", "|---|---|---|---|"]
+
+          def num(key):
+              try:
+                  return float(measures.get(key))
+              except (TypeError, ValueError):
+                  return None
+
+          checks = [
+              ("coverage", "> 70", 70.0, lambda a, t: a > t),
+              ("bugs", "= 0", 0.0, lambda a, t: a == t),
+              ("vulnerabilities", "= 0", 0.0, lambda a, t: a == t),
+          ]
+          failed = []
+          for key, label, thr, ok in checks:
+              actual = num(key)
+              if actual is None:
+                  lines.append("| %s | %s | 未取到 | 无法判定 |" % (key, label))
+                  failed.append(key)
+                  continue
+              passed = ok(actual, thr)
+              lines.append("| %s | %s | %s | %s |" % (
+                  key, label, measures.get(key), "通过" if passed else "**不通过**"))
+              if not passed:
+                  failed.append(key)
+
+          lines += ["", "**总体：%s**" % ("全部通过" if not failed else "不通过（%s）" % "、".join(failed))]
+          print("\n".join(lines))
+          PY
+          cat evidence/07-summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 截图 Dashboard（可选）
+        if: always()
+        continue-on-error: true
+        run: |
+          # 匿名访问要过两道：项目得是 public，且实例不能强制登录。
+          # 后者用 SONAR_WEB_FORCEAUTHENTICATION 环境变量试过没用（截出来还是登录页），
+          # 它实际是存在数据库里的设置，只能走 /api/settings/set 改。
+          curl -s -u "admin:$SONAR_ADMIN_PASSWORD" -X POST \
+            "$SONAR_URL/api/settings/set?key=sonar.forceAuthentication&value=false" || true
+          curl -s -u "admin:$SONAR_ADMIN_PASSWORD" -X POST \
+            "$SONAR_URL/api/projects/update_visibility?project=$SONAR_PROJECT_KEY&visibility=public" || true
+          sleep 3
+
+          # 镜像里自带的 playwright 是 1.48.0，而裸 npx 会去 npm 拉最新版（1.64.1），
+          # 两者浏览器版本对不上，直接报版本不匹配、截不出图。钉住版本即可。
+          docker run --rm --network host \
+            -v "$PWD/evidence:/evidence" \
+            mcr.microsoft.com/playwright:v1.48.0-jammy \
+            npx --yes playwright@1.48.0 screenshot --wait-for-timeout 8000 --full-page \
+            "$SONAR_URL/dashboard?id=$SONAR_PROJECT_KEY" /evidence/08-dashboard.png 2>&1 | tail -10
+          ls -l evidence/08-dashboard.png || echo "截图未产出（不影响扫描结果）"
+
+      - name: 收集实例日志
+        if: always()
+        run: |
+          docker logs sonarqube > evidence/09-sonarqube.log 2>&1 || true
+          tail -50 evidence/09-sonarqube.log || true
+
+      - name: 上传证据
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonarqube-evidence
+          path: evidence/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: 清理
+        if: always()
+        run: |
+          docker rm -f sonarqube sonar-db || true
+          docker network rm sonar-net || true
