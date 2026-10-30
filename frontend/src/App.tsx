@@ -19,16 +19,28 @@ function Header() {
     let current = true;
     setUnread(0);
     if (!me) return;
-    const load = () => api.unreadCount().then((r) => { if (current) setUnread(r.count); }).catch(() => undefined);
+    const load = () =>
+      api
+        .unreadCount()
+        .then((r) => {
+          if (current) setUnread(r.count);
+        })
+        .catch(() => undefined);
     load();
     const timer = setInterval(load, 30_000);
     window.addEventListener('notifications-read', load);
-    return () => { current = false; clearInterval(timer); window.removeEventListener('notifications-read', load); };
+    return () => {
+      current = false;
+      clearInterval(timer);
+      window.removeEventListener('notifications-read', load);
+    };
   }, [me]);
 
   return (
     <header className="topbar">
-      <Link className="brand" to="/">CampusOverflow</Link>
+      <Link className="brand" to="/">
+        CampusOverflow
+      </Link>
       <nav>
         <Link to="/">问题</Link>
         <Link to="/leaderboard">排行榜</Link>
@@ -39,12 +51,29 @@ function Header() {
         <div className="user">
           <span>{me.displayName}</span>
           <span className="role">{me.role}</span>
-          <button onClick={() => logout().then(() => { setError(''); navigate('/'); }).catch((e: Error) => setError(e.message))}>退出</button>
+          <button
+            onClick={() =>
+              logout()
+                .then(() => {
+                  setError('');
+                  navigate('/');
+                })
+                .catch((e: Error) => setError(e.message))
+            }
+          >
+            退出
+          </button>
         </div>
       ) : (
-        <Link className="primary" to="/login">登录 / 注册</Link>
+        <Link className="primary" to="/login">
+          登录 / 注册
+        </Link>
       )}
-      {error && <span className="error" role="alert">{error}</span>}
+      {error && (
+        <span className="error" role="alert">
+          {error}
+        </span>
+      )}
     </header>
   );
 }
@@ -64,11 +93,33 @@ export function App() {
           <Routes>
             <Route path="/" element={<QuestionListPage />} />
             <Route path="/questions/:id" element={<QuestionDetailPage />} />
-            <Route path="/ask" element={<RequireAuth><AskPage /></RequireAuth>} />
+            <Route
+              path="/ask"
+              element={
+                <RequireAuth>
+                  <AskPage />
+                </RequireAuth>
+              }
+            />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/leaderboard" element={<LeaderboardPage />} />
-            <Route path="*" element={<div><h1>页面不存在</h1><Link to="/">返回问题列表</Link></div>} />
-            <Route path="/notifications" element={<RequireAuth><NotificationsPage /></RequireAuth>} />
+            <Route
+              path="*"
+              element={
+                <div>
+                  <h1>页面不存在</h1>
+                  <Link to="/">返回问题列表</Link>
+                </div>
+              }
+            />
+            <Route
+              path="/notifications"
+              element={
+                <RequireAuth>
+                  <NotificationsPage />
+                </RequireAuth>
+              }
+            />
           </Routes>
         </main>
       </AuthProvider>

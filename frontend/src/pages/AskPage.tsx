@@ -52,24 +52,57 @@ export function AskPage() {
   };
 
   return (
-    <form className="form-page" aria-busy={submitting} onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+    <form
+      className="form-page"
+      aria-busy={submitting}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}
+    >
       <h1>提出一个问题</h1>
-      <label>标题（10–150 字，尽量具体）
-        <input required minLength={10} maxLength={150} disabled={submitting} value={title} onChange={(e) => setTitle(e.target.value)} />
+      <label>
+        标题（10–150 字，尽量具体）
+        <input
+          required
+          minLength={10}
+          maxLength={150}
+          disabled={submitting}
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+        />
       </label>
       <p className="muted">正文至少 20 字：说明你尝试过什么、卡在哪里。</p>
       <MarkdownEditor value={body} onChange={setBody} disabled={submitting} minLength={20} />
-      <label>标签（1–5 个，用空格或逗号分隔）
-        <input required disabled={submitting} value={tags} onChange={(e) => setTags(e.target.value)} placeholder="数据结构 红黑树" />
+      <label>
+        标签（1–5 个，用空格或逗号分隔）
+        <input
+          required
+          disabled={submitting}
+          value={tags}
+          onChange={(e) => setTags(e.target.value)}
+          placeholder="数据结构 红黑树"
+        />
       </label>
-      <label>所属课程（可选）
+      <label>
+        所属课程（可选）
         <select disabled={submitting} value={courseId} onChange={(e) => setCourseId(e.target.value)}>
           <option value="">不关联课程</option>
-          {me?.courses.map((c) => <option key={c.id} value={c.id}>{c.code} {c.name}</option>)}
+          {me?.courses.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.code} {c.name}
+            </option>
+          ))}
         </select>
       </label>
-      {error && <p role="alert" className="error">{error}</p>}
-      <button type="submit" className="primary" disabled={submitting}>{submitting ? '正在发布…' : '发布问题'}</button>
+      {error && (
+        <p role="alert" className="error">
+          {error}
+        </p>
+      )}
+      <button type="submit" className="primary" disabled={submitting}>
+        {submitting ? '正在发布…' : '发布问题'}
+      </button>
     </form>
   );
 }
