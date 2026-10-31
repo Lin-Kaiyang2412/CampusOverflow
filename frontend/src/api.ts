@@ -1,16 +1,31 @@
 import type {
-  Bounty, LeaderboardEntry, Me, Notification, Page, QuestionDetail, QuestionSummary, ReputationProfile, SearchResult,
+  Bounty,
+  LeaderboardEntry,
+  Me,
+  Notification,
+  Page,
+  QuestionDetail,
+  QuestionSummary,
+  ReputationProfile,
+  SearchResult,
 } from './types';
 
 /** 后端以 RFC 9457 Problem Details 返回错误，这里统一转成带业务码的异常。 */
 export class ApiError extends Error {
-  constructor(readonly status: number, readonly code: string, message: string) {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+  ) {
     super(message);
   }
 }
 
 function cookie(name: string): string | undefined {
-  return document.cookie.split('; ').find((c) => c.startsWith(`${name}=`))?.split('=')[1];
+  return document.cookie
+    .split('; ')
+    .find((c) => c.startsWith(`${name}=`))
+    ?.split('=')[1];
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
@@ -28,7 +43,9 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   let res: Response;
   try {
     res = await fetch(`/api${path}`, {
-      method, headers, credentials: 'include',
+      method,
+      headers,
+      credentials: 'include',
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
@@ -37,10 +54,17 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   let data;
-  try { data = text ? JSON.parse(text) : undefined; }
-  catch { throw new ApiError(res.status, 'INVALID_RESPONSE', '服务返回异常，请稍后重试或联系管理员。'); }
+  try {
+    data = text ? JSON.parse(text) : undefined;
+  } catch {
+    throw new ApiError(res.status, 'INVALID_RESPONSE', '服务返回异常，请稍后重试或联系管理员。');
+  }
   if (!res.ok) {
-    throw new ApiError(res.status, data?.code ?? 'SYS-000', data?.detail ?? (res.status >= 500 ? '服务暂不可用，请确认后端已启动后重试。' : `请求失败（${res.status}）`));
+    throw new ApiError(
+      res.status,
+      data?.code ?? 'SYS-000',
+      data?.detail ?? (res.status >= 500 ? '服务暂不可用，请确认后端已启动后重试。' : `请求失败（${res.status}）`),
+    );
   }
   return data as T;
 }

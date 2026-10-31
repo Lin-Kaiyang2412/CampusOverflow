@@ -62,7 +62,9 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: |
+            frontend/package-lock.json
+            package-lock.json
 
       - name: Install frontend dependencies
         working-directory: frontend
@@ -76,6 +78,46 @@ jobs:
       - name: Lint frontend
         working-directory: frontend
         run: npm run lint
+
+      # 阶段 1.5：格式检查（Prettier）。与 ESLint 分开成一步，格式问题不混在语义检查里报，
+      # 定位时能一眼看出是「写得不对」还是「排得不对」。
+      # 工具链装在仓库根目录（提交钩子必须作用于整个仓库），故需在根目录单独装依赖。
+      # HUSKY=0 跳过钩子安装：CI 里没有提交动作，装了也没用。
+      - name: Install repo tooling
+        run: npm ci --no-audit --no-fund
+        env:
+          HUSKY: "0"
+
+      - name: Check frontend formatting
+        run: npm run format:check
+
+      # 阶段 1.6：验证提交钩子在 CI 的 Node 版本下真的能拦截（PR #42 评审意见）。
+      # 只跑 prettier --check 不能证明 lint-staged 钩子可用——这里显式验证两个方向：
+      # 不合规文件必须被拦（非零退出），合规文件必须通过（零退出）。
+      - name: Verify pre-commit hook blocks non-compliant commits
+        run: |
+          set -o pipefail
+          probe="frontend/src/__lint_probe.ts"
+
+          # 方向一：不合规文件应被拦截
+          printf 'const  probe={a:1,b:2}\n' > "$probe"
+          git add -f "$probe"
+          if npx lint-staged; then
+            echo "::error::lint-staged 未拦截不合规文件，提交钩子失效"
+            git reset -q HEAD "$probe"; rm -f "$probe"; exit 1
+          fi
+          echo "OK: 不合规文件被拦截"
+          git reset -q HEAD "$probe"
+
+          # 方向二：合规文件应通过
+          printf 'const probe = { a: 1, b: 2 };\n' > "$probe"
+          git add -f "$probe"
+          if ! npx lint-staged; then
+            echo "::error::lint-staged 拒绝了合规文件"
+            git reset -q HEAD "$probe"; rm -f "$probe"; exit 1
+          fi
+          echo "OK: 合规文件通过"
+          git reset -q HEAD "$probe"; rm -f "$probe"
 
       - name: Build frontend
         working-directory: frontend

@@ -1,0 +1,21 @@
+# 统一编辑器行为，避免因缩进/换行符差异产生无意义 diff。
+# 提交前由 Prettier 负责最终格式，这里只约束编辑器侧最容易出问题的几项。
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.md]
+# Markdown 的行尾双空格是有语义的（强制换行），不能自动裁掉
+trim_trailing_whitespace = false
+
+[*.{java,xml}]
+indent_size = 4
+
+[Makefile]
+indent_style = tab

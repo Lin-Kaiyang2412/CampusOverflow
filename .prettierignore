@@ -1,0 +1,17 @@
+# 构建产物与依赖目录
+**/dist/
+**/node_modules/
+**/coverage/
+
+# 锁文件由 npm 维护，手改会被覆盖
+package-lock.json
+
+# CSS 刻意采用「一条规则一行」的紧凑写法，Prettier 会把它展开成每行一个声明，
+# 反而降低可读性。样式表规模很小，人工维护成本低于格式化带来的 diff 噪音。
+*.css
+
+# 文档与后端不在本工具链范围内
+*.md
+backend/
+deploy/
+docs/
