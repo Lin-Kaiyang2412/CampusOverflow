@@ -3,6 +3,7 @@
 验证对象：`backend` 全量源码的静态分析与覆盖率。
 验证方式：在 GitHub Actions 的 `ubuntu-latest` runner 上现场起 `sonarqube:10.7-community` + `postgres:16`，扫完即销毁。
 工作流：`.github/workflows/sonarqube.yml`。
+定位：**质量门禁**。绿灯代表指标达标，不只是扫描跑完；任一项不通过或指标缺失时，job 会失败，证据仍会归档。
 
 ## 为什么之前是空的
 
@@ -59,7 +60,7 @@ Dashboard 截图见 [`sonarqube-2026-10-30-dashboard.png`](./sonarqube-2026-10-3
 | bugs | = 0 | 2 | **不通过** |
 | vulnerabilities | = 0 | 0 | 通过 |
 
-所以工作流的汇总步骤直接拿指标与声明阈值比对，不再依赖服务端门禁状态。这也比改服务端配置更可靠——试过两次都不行：
+所以工作流在「采集质量门禁与指标」步骤里拿实际指标与声明阈值逐项比对，把结论写进 `evidence/07-gate-result.txt`，再由「质量门禁判定」步骤决定 job 成败：不通过或指标缺失即 `exit 1`，而证据在这之前已经上传。这也比改服务端配置更可靠——试过两次都不行：
 
 - `/api/qualitygates/create` 返回体里没有 `id`（只回 `{"name":"CampusOverflow"}`）
 - `/api/qualitygates/list` 返回的默认门禁也没有 `id`，且 `actions.manageConditions` 为 `false`，内置门禁不允许改条件
@@ -74,6 +75,8 @@ Dashboard 截图见 [`sonarqube-2026-10-30-dashboard.png`](./sonarqube-2026-10-3
 这正是 Sonar 比 JaCoCo 门禁更有价值的地方：JaCoCo 的门禁只看领域层，容易给出「覆盖率很好」的印象；Sonar 把整体拉出来，暴露的是真实缺口。
 
 **结论：如果 Lab 7 要求整体覆盖率 > 70%，当前不达标，需要补 infrastructure / interfaces 层的测试，或者把门禁口径明确限定为领域层并在文档里写清楚。**
+
+**因此这个工作流当前会判失败**（覆盖率 33.6%、Bugs 2），这是门禁应有的行为，不是工作流写错了。要转绿只有两条路：补 infrastructure / interfaces 层测试把整体覆盖率抬到 70% 以上并修掉 2 个 Bug，或者把门禁口径正式改成领域层，并同步修改 `sonar-project.properties` 与本文档。
 
 ## 顺带发现
 

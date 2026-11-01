@@ -1,5 +1,10 @@
-# SonarQube 静态扫描：在 runner 上起一个临时 SonarQube 实例，把 backend 真扫一遍，
-# 产出质量门禁结果与各项指标（Lab 7 提交物 1「SonarQube Dashboard」）。
+# SonarQube 质量门禁：在 runner 上起一个临时 SonarQube 实例，把 backend 真扫一遍，
+# 按 sonar-project.properties 声明的阈值（覆盖率 > 70%、Bugs = 0、Vulnerabilities = 0）
+# 判定是否达标；不达标或指标缺失时 job 失败，证据仍会归档。
+#
+# 定位是「门禁」，不是「扫描取证」：绿灯代表指标达标，而不只是扫描跑完了。
+# 服务端默认门禁只卡「新代码」，首次分析没有 baseline、conditions 为空，不能当判据；
+# 所以判定放在本地按整体指标做（见「采集质量门禁与指标」与「质量门禁判定」两步）。
 #
 # 为什么要在 CI 里跑：`backend/sonar-project.properties` 早就写好了，但 compose 的服务
 # 清单里没有 sonarqube，团队也没有可用的实例，所以这个配置从落地起就没执行过一次
@@ -7,7 +12,7 @@
 #
 # 这里用 sonarqube:10.7-community + postgres:16 现场起实例，扫完即销毁，
 # 不需要任何外部账号或 Token。证据是 API 返回的 JSON，比截图更可核验。
-name: SonarQube 扫描
+name: SonarQube 质量门禁
 
 on:
   # 手动触发：需要出 Dashboard 证据时点一次
@@ -144,10 +149,10 @@ jobs:
           # sonar-project.properties 里的 projectKey，改用 pom 的 groupId:artifactId
           # （实测扫出来是 com.campusoverflow:campus-overflow，按 campus-overflow 查是 404）。
           #
-          # qualitygate.wait 保持 false：门禁按 sonar-project.properties 声明的阈值
-          # （覆盖率 > 70%、Bugs = 0、Vulnerabilities = 0）配置，而当前实际值是
-          # 整体覆盖率 33.6%、bugs 2 —— 门禁必然判 ERROR。这里不把它变成 job 失败，
-          # 是因为长期红灯只会被习惯性忽略，结论放在 evidence 与 step summary 里更有效。
+          # qualitygate.wait 保持 false：服务端默认门禁只卡「新代码」，首次分析没有
+          # baseline，conditions 为空、状态直接 OK，等它没有意义。真正的判定放在后面的
+          # 「采集质量门禁与指标」与「质量门禁判定」两步：先把证据落盘，再按声明阈值
+          # 决定 job 成败，保证失败时证据仍然完整。
           mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:5.1.0.4751:sonar \
             -Dsonar.host.url="$SONAR_URL" \
             -Dsonar.token="$SONAR_TOKEN" \
@@ -263,9 +268,16 @@ jobs:
                   failed.append(key)
 
           lines += ["", "**总体：%s**" % ("全部通过" if not failed else "不通过（%s）" % "、".join(failed))]
+          lines += ["", "> 本工作流是质量门禁：上表任一项「不通过」或「无法判定」，"
+                        "「质量门禁判定」步骤会让 job 失败；证据仍会归档到 artifact。"]
           print("\n".join(lines))
+
+          # 结论写入独立文件，供后续判定步骤读取（不靠解析 markdown 表格）
+          with open(os.path.join(base, "07-gate-result.txt"), "w", encoding="utf-8") as f:
+              f.write("PASS\n" if not failed else "FAIL:" + ",".join(failed) + "\n")
           PY
           cat evidence/07-summary.md >> "$GITHUB_STEP_SUMMARY"
+          cat evidence/07-gate-result.txt
 
       - name: 截图 Dashboard（可选）
         if: always()
@@ -303,6 +315,30 @@ jobs:
           path: evidence/
           retention-days: 30
           if-no-files-found: warn
+
+      - name: 质量门禁判定
+        if: always()
+        run: |
+          # 放在「上传证据」之后：先保证证据落盘，再决定 job 成败。
+          # 判据是 sonar-project.properties 声明的整体指标，不是服务端门禁状态
+          # （默认「Sonar way」只卡新代码，首次分析 conditions 为空，不能用）。
+          set +e
+          result_file=evidence/07-gate-result.txt
+          if [ ! -f "$result_file" ]; then
+            echo "::error::门禁结论文件缺失：采集步骤没有产出 $result_file（扫描或指标采集失败），按不通过处理"
+            exit 1
+          fi
+
+          result=$(tr -d '\r\n' < "$result_file")
+          echo "门禁结论：$result"
+          if [ "$result" = "PASS" ]; then
+            echo "质量门禁通过：覆盖率 > 70%、Bugs = 0、Vulnerabilities = 0"
+            exit 0
+          fi
+
+          failed=${result#FAIL:}
+          echo "::error::质量门禁不通过：$failed。阈值见 backend/sonar-project.properties（覆盖率 > 70%、Bugs = 0、Vulnerabilities = 0），实际值见 evidence/07-summary.md"
+          exit 1
 
       - name: 清理
         if: always()
