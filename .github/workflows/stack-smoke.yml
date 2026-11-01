@@ -37,7 +37,9 @@ on:
 
 permissions:
   contents: read
-  packages: read
+  # 临时：验证非 latest 标签流程时，需要把用修复后 Dockerfile 构建的镜像推到 GHCR
+  # （GHCR 上现有 tag 都是修复前构建的，缺 app.jar）。验证完改回 read。
+  packages: write
 
 concurrency:
   group: stack-smoke
@@ -51,8 +53,9 @@ jobs:
 
     env:
       COMPOSE_FILE: deploy/docker-compose.yml
-      # workflow_dispatch 用输入的标签；临时 push 验证固定用一个非 latest 标签（验证完删除）
-      IMAGE_TAG: ${{ github.event.inputs.image_tag || (github.event_name == 'push' && 'sha-6b21aef') || '' }}
+      # 临时：workflow_dispatch 用输入的标签；push 验证固定用本次构建的验证标签。
+      # 验证完删除，恢复为 ${{ github.event.inputs.image_tag }}。
+      IMAGE_TAG: ${{ github.event.inputs.image_tag || (github.event_name == 'push' && 'ci-verify-20261101') || '' }}
 
     steps:
       - name: 检出代码
@@ -77,6 +80,21 @@ jobs:
             echo '```'
           } > evidence/00-environment.md
           cat evidence/00-environment.md
+
+      - name: 临时构建并推送验证镜像（仅本次验证）
+        if: github.event_name == 'push'
+        run: |
+          set -o pipefail
+          # GHCR 上现有 tag 都是修复前 Dockerfile 构建的（缺 app.jar），
+          # 为了验证「从 GHCR 拉取非 latest 标签」的完整链路，先用当前分支的
+          # 修复版 Dockerfile 构建并推一个临时 tag；验证完删除该 tag 与这个 step。
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker build -f deploy/backend.Dockerfile \
+            -t "ghcr.io/lin-kaiyang2412/campusoverflow-backend:$IMAGE_TAG" . 2>&1 | tail -15
+          docker build -f deploy/frontend.Dockerfile \
+            -t "ghcr.io/lin-kaiyang2412/campusoverflow-web:$IMAGE_TAG" . 2>&1 | tail -15
+          docker push "ghcr.io/lin-kaiyang2412/campusoverflow-backend:$IMAGE_TAG"
+          docker push "ghcr.io/lin-kaiyang2412/campusoverflow-web:$IMAGE_TAG"
 
       - name: 准备镜像（现场构建，或按 image_tag 拉 GHCR）
         run: |
