@@ -101,6 +101,33 @@ Config: ["sh","-c","exec java $JAVA_OPTS -jar app.jar"]  WorkingDir: /app  User:
 - 冒烟改为默认现场构建镜像：`ci.yml` 的 `images` job 是 `if: github.event_name == 'push'`，PR 里改 Dockerfile 不会更新 latest，拉 latest 等于在验旧代码
 - 新增「校验镜像内容」步骤，启动前先证明 `app.jar` / `index.html` 真的在镜像里
 
+### 第四轮 `41306128672`：非 latest 标签流程验证（2026-11-01）
+
+评审指出：手动指定 `image_tag` 时，`BACKEND_IMAGE` / `WEB_IMAGE` 只是普通 shell 变量，写进 `$GITHUB_ENV` 只对后续 step 生效；而 `docker compose pull` 在同一个 step 里先执行，读不到这两个变量，会去拉 compose 的默认镜像名——结果「拉下来的标签」与「后面启动的标签」不是同一个。
+
+修复：
+
+- 在 pull / build **之前** `export BACKEND_IMAGE` / `WEB_IMAGE`
+- pull 后用 `docker image inspect` 断言指定标签确实在本地
+- 新增 `evidence/02a-images-used.md`，记录本次实际使用的镜像
+
+验证方式：用一个非 latest 标签 `ci-verify-20261101` 走 `image_tag` 分支完整跑一遍。GHCR 上原有 tag 都是修复前 Dockerfile 构建的（缺 `app.jar`），所以临时用修复后的 Dockerfile 构建并推送了这个 tag；验证后已删除。
+
+结果（run [`41306128672`](https://github.com/Lin-Kaiyang2412/CampusOverflow/actions/runs/41306128672)，**success**）：
+
+| 检查项 | 结果 |
+|---|---|
+| `IMAGE_TAG` 输入 | `ci-verify-20261101` |
+| pull 的镜像 | `ghcr.io/.../campusoverflow-backend:ci-verify-20261101`、`...-web:ci-verify-20261101` |
+| `02-images.txt` | 两个镜像 tag 均为 `ci-verify-20261101`（439MB / 73.9MB） |
+| 镜像内容 | `/app/app.jar` 79MB；`index.html` 存在 |
+| 容器状态 | co-mysql / co-redis / co-web / co-backend 全部 Healthy |
+| 健康检查 | 后端 `/actuator/health` 200、前端首页 200、运行中容器 4 |
+
+对比：修复前用同一个 `image_tag` 跑，pull 阶段读不到变量，拉的是 compose 默认镜像名；现在 `02a-images-used.md` 与 `02-images.txt` 能直接对上。
+
+> 临时加的「构建并推送验证镜像」步骤与 `packages: write` 已在验证后删除，GHCR 上的 `ci-verify-20261101` 标签也已清理。最终 PR diff 只保留 export 顺序的修复。
+
 ## 怎么复现
 
 ```bash
