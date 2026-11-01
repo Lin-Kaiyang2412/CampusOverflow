@@ -126,7 +126,8 @@ Config: ["sh","-c","exec java $JAVA_OPTS -jar app.jar"]  WorkingDir: /app  User:
 
 对比：修复前用同一个 `image_tag` 跑，pull 阶段读不到变量，拉的是 compose 默认镜像名；现在 `02a-images-used.md` 与 `02-images.txt` 能直接对上。
 
-> 临时加的「构建并推送验证镜像」步骤与 `packages: write` 已在验证后删除，GHCR 上的 `ci-verify-20261101` 标签也已清理。最终 PR diff 只保留 export 顺序的修复。
+> 临时加的「构建并推送验证镜像」步骤与 `packages: write` 已在验证后删除，最终 PR diff 只保留 export 顺序的修复。
+> GHCR 上的 `ci-verify-20261101` 标签保留下来，作为可复现的验证镜像（当前账号 token 没有 `delete:packages` 权限，无法从命令行删除；需要清理时在仓库 Packages 页面手动删该版本即可）。
 
 ## 怎么复现
 
