@@ -30,6 +30,10 @@ on:
     paths:
       - "deploy/**"
       - ".github/workflows/stack-smoke.yml"
+  # 临时触发：用于验证「手动指定非 latest 标签」的流程，验证完即删。
+  push:
+    branches:
+      - ci/stack-smoke
 
 permissions:
   contents: read
@@ -47,7 +51,8 @@ jobs:
 
     env:
       COMPOSE_FILE: deploy/docker-compose.yml
-      IMAGE_TAG: ${{ github.event.inputs.image_tag }}
+      # workflow_dispatch 用输入的标签；临时 push 验证固定用一个非 latest 标签（验证完删除）
+      IMAGE_TAG: ${{ github.event.inputs.image_tag || (github.event_name == 'push' && 'sha-6b21aef') || '' }}
 
     steps:
       - name: 检出代码
@@ -78,21 +83,42 @@ jobs:
           # set -o pipefail 必须加：否则 `cmd | tee` 的退出码取 tee 的，构建/拉取失败会被吞掉，
           # 表现为「成功」但后面容器起不来（2026-10-30 第一次运行就踩了这个坑）。
           set -o pipefail
+
+          # BACKEND_IMAGE / WEB_IMAGE 必须在 pull / build 之前 export。
+          # compose 是在「执行这一刻」读环境变量来决定用哪个镜像的；写进 $GITHUB_ENV 只对
+          # 后续 step 生效，本 step 里的 pull 读不到，会去拉 compose 的默认镜像名，
+          # 结果「拉下来的标签」和「后面启动的标签」不是同一个（2026-11-01 评审指出）。
           if [ -n "$IMAGE_TAG" ]; then
-            backend="ghcr.io/lin-kaiyang2412/campusoverflow-backend:$IMAGE_TAG"
-            web="ghcr.io/lin-kaiyang2412/campusoverflow-web:$IMAGE_TAG"
+            export BACKEND_IMAGE="ghcr.io/lin-kaiyang2412/campusoverflow-backend:$IMAGE_TAG"
+            export WEB_IMAGE="ghcr.io/lin-kaiyang2412/campusoverflow-web:$IMAGE_TAG"
             # 镜像是公开包，匿名即可拉取；显式 pull 便于在启动失败前先暴露拉取问题
             docker compose -f "$COMPOSE_FILE" pull mysql redis backend web 2>&1 | tee evidence/01-pull.log
+            # 拉完立刻确认指定标签真的在本地，避免 pull 静默退化成默认标签
+            docker image inspect "$BACKEND_IMAGE" > /dev/null
+            docker image inspect "$WEB_IMAGE" > /dev/null
           else
             # 不设 BACKEND_IMAGE/WEB_IMAGE 时，compose 用 campus-overflow-{backend,web}:local 并现场构建
-            backend="campus-overflow-backend:local"
-            web="campus-overflow-web:local"
+            export BACKEND_IMAGE="campus-overflow-backend:local"
+            export WEB_IMAGE="campus-overflow-web:local"
             docker compose -f "$COMPOSE_FILE" build backend web 2>&1 | tee evidence/01-build.log
           fi
+
+          # 导出给后续 step（校验镜像内容 / up / 失败诊断）使用
           {
-            echo "BACKEND_IMAGE=$backend"
-            echo "WEB_IMAGE=$web"
+            echo "BACKEND_IMAGE=$BACKEND_IMAGE"
+            echo "WEB_IMAGE=$WEB_IMAGE"
           } >> "$GITHUB_ENV"
+
+          # 单独留一份「本次实际使用镜像」的记录，便于核对拉的与起的是一套
+          {
+            echo "### 本次使用的镜像"
+            echo ""
+            echo "- IMAGE_TAG 输入: \`${IMAGE_TAG:-（空，现场构建）}\`"
+            echo "- BACKEND_IMAGE: \`$BACKEND_IMAGE\`"
+            echo "- WEB_IMAGE: \`$WEB_IMAGE\`"
+          } > evidence/02a-images-used.md
+          cat evidence/02a-images-used.md
+
           docker images --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}' \
             > evidence/02-images.txt
           cat evidence/02-images.txt
